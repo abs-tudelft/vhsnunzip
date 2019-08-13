@@ -1,0 +1,15 @@
+[submodule "tests/vhlib"]
+	path = tests/vhlib
+	url = https://github.com/abs-tudelft/vhlib.git
+[submodule "tests/snappy"]
+	path = tests/snappy
+	url = https://github.com/google/snappy.git
+[submodule "tests/snzip"]
+	path = tests/snzip
+	url = https://github.com/kubo/snzip.git
+[submodule "tests/tools/snzip"]
+	path = tests/tools/snzip
+	url = https://github.com/kubo/snzip.git
+[submodule "tests/tools/snappy"]
+	path = tests/tools/snappy
+	url = https://github.com/google/snappy.git
