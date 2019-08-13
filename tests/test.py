@@ -38,13 +38,13 @@ library work;
 entity vhsnunzip_tc is
 end vhsnunzip_tc;
 
+-- pragma simulation timeout 100 ms
+
 architecture TestVector of vhsnunzip_tc is
 begin
 
   tb_inst: entity work.vhsnunzip_tb
     generic map ({generics});
-
-  tv_inst: entity work.vhsnunzip_tv;
 
 end TestVector;
 """
@@ -113,10 +113,18 @@ with tempfile.TemporaryDirectory() as tempdir:
     uncompressed_chunks_out = [[]]
     with open(pjoin(tempdir, 'output.txt'), 'r') as fin:
         for line in fin.read().split('\n')[:-1]:
-            if not line:
+            if line in ('', 'error'):
+                if line == 'error':
+                    print('decompression error for chunk %d' % (len(uncompressed_chunks_out) - 1))
                 uncompressed_chunks_out[-1] = bytes(uncompressed_chunks_out[-1])
                 uncompressed_chunks_out.append([])
             else:
-                uncompressed_chunks_out[-1].append(int(line, 2))
+                try:
+                    uncompressed_chunks_out[-1].append(int(line, 2))
+                except ValueError:
+                    print('error parsing output - U or X bit?')
+                    sys.exit(1)
     uncompressed_chunks_out = uncompressed_chunks_out[:-1]
-    print(uncompressed_chunks_out)
+    #print(uncompressed_chunks_out)
+    print('checking the output is TODO!')
+    sys.exit(1)
