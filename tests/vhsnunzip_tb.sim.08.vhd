@@ -174,7 +174,7 @@ begin
         count := 0;
       end if;
       for i in 0 to count - 1 loop
-        write(outline, in_data(i*8+7 downto i*8));
+        write(outline, out_data(i*8+7 downto i*8));
         writeline(outfile, outline);
       end loop;
       if out_last = '1' then

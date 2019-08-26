@@ -125,6 +125,25 @@ with tempfile.TemporaryDirectory() as tempdir:
                     print('error parsing output - U or X bit?')
                     sys.exit(1)
     uncompressed_chunks_out = uncompressed_chunks_out[:-1]
-    #print(uncompressed_chunks_out)
-    print('checking the output is TODO!')
-    sys.exit(1)
+
+    # Check the output.
+    for ci, (exp_chunk, act_chunk) in enumerate(
+            itertools.zip_longest(compressed_chunks, uncompressed_chunks_out)):
+        if exp_chunk is None:
+            print('error: spurious chunk in output')
+            sys.exit(1)
+        if act_chunk is None:
+            print('error: missing chunk in output')
+            sys.exit(1)
+        for bi, (exp_byte, act_byte) in enumerate(
+                itertools.zip_longest(exp_chunk, act_chunk)):
+            if exp_byte is None:
+                print('error: spurious byte in chunk %d: 0x%02X' % (ci, act_byte))
+                sys.exit(1)
+            if act_byte is None:
+                print('error: missing byte in chunk %d' % ci)
+                sys.exit(1)
+            if exp_byte != act_byte:
+                print('error: byte %d in chunk %d should be 0x%02X but was 0x%02X'
+                      % (bi, ci, exp_byte, act_byte))
+                sys.exit(1)
