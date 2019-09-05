@@ -94,9 +94,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
     # Write the test case.
     generics = {
-        'BYTES_PER_CYCLE': keys.pop('bytes_per_cycle', '4'),
-        'DECODER_CFG': keys.pop('decoder_cfg', '"C"'),
-        'HISTORY_DEPTH_LOG2': keys.pop('history_depth_log2', '16'),
+        'COUNT_MAX': keys.pop('width', '4'),
+        'DATA_DEPTH_LOG2_BYTES': keys.pop('depth', '16'),
     }
     generics = ', '.join(['%s => %s' % x for x in generics.items()])
     with open(pjoin(tempdir, 'vhsnunzip_tc.sim.08.vhd'), 'w') as fout:
@@ -128,7 +127,7 @@ with tempfile.TemporaryDirectory() as tempdir:
 
     # Check the output.
     for ci, (exp_chunk, act_chunk) in enumerate(
-            itertools.zip_longest(compressed_chunks, uncompressed_chunks_out)):
+            itertools.zip_longest(uncompressed_chunks, uncompressed_chunks_out)):
         if exp_chunk is None:
             print('error: spurious chunk in output')
             sys.exit(1)

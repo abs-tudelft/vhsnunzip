@@ -31,23 +31,22 @@ use work.StreamSink_pkg.all;
 entity vhsnunzip_tb is
   generic (
 
-    -- The maximum number of bytes transferred per cycle.
-    BYTES_PER_CYCLE         : natural := 4;
+    -- The maximum number of data bytes transferred per cycle on the input and
+    -- output streams. This must be a power of two, and must be at least 4.
+    COUNT_MAX               : natural := 64;
 
-    -- Decoder configuration, see vhsnunzip.
-    DECODER_CFG             : string := "C";
-
-    -- Depth of the history buffer. The maximum supported offset in copy
-    -- elements is 2**HISTORY_DEPTH_LOG2.
-    HISTORY_DEPTH_LOG2      : natural := 16
+    -- Depth of the data buffer. This buffer must be able to store the
+    -- data decompressed so far and the remaining compressed data at all times,
+    -- with a little overhead on top due to line sizes. A 1R1W RAM is inferred
+    -- based on this depth, COUNT_MAX bits wide on both ports.
+    DATA_DEPTH_LOG2_BYTES   : natural := 17
 
   );
 end vhsnunzip_tb;
 
 architecture testbench of vhsnunzip_tb is
 
-  constant COUNT_MAX            : natural := BYTES_PER_CYCLE;
-  constant COUNT_WIDTH          : natural := log2ceil(BYTES_PER_CYCLE);
+  constant COUNT_WIDTH          : natural := log2ceil(COUNT_MAX);
   constant INSERT_RESHAPER      : boolean := true;
   constant RESHAPER_SPS         : natural := 3;
   constant RAM_CONFIG           : string := "";
@@ -192,30 +191,29 @@ begin
 
   uut: entity work.vhsnunzip
     generic map (
-      COUNT_MAX                 => COUNT_MAX,
-      COUNT_WIDTH               => COUNT_WIDTH,
-      INSERT_RESHAPER           => INSERT_RESHAPER,
-      RESHAPER_SPS              => RESHAPER_SPS,
-      DECODER_CFG               => DECODER_CFG,
-      HISTORY_DEPTH_LOG2        => HISTORY_DEPTH_LOG2,
-      RAM_CONFIG                => RAM_CONFIG
+      COUNT_MAX               => COUNT_MAX,
+      COUNT_WIDTH             => COUNT_WIDTH,
+      INSERT_RESHAPER         => INSERT_RESHAPER,
+      RESHAPER_SPS            => RESHAPER_SPS,
+      DATA_DEPTH_LOG2_BYTES   => DATA_DEPTH_LOG2_BYTES,
+      RAM_CONFIG              => RAM_CONFIG
     )
     port map (
-      clk                       => clk,
-      reset                     => reset,
-      in_valid                  => in_valid,
-      in_ready                  => in_ready,
-      in_dvalid                 => in_dvalid,
-      in_data                   => in_data,
-      in_count                  => in_count,
-      in_last                   => in_last,
-      out_valid                 => out_valid,
-      out_ready                 => out_ready,
-      out_dvalid                => out_dvalid,
-      out_data                  => out_data,
-      out_count                 => out_count,
-      out_last                  => out_last,
-      out_error                 => out_error
+      clk                     => clk,
+      reset                   => reset,
+      in_valid                => in_valid,
+      in_ready                => in_ready,
+      in_dvalid               => in_dvalid,
+      in_data                 => in_data,
+      in_count                => in_count,
+      in_last                 => in_last,
+      out_valid               => out_valid,
+      out_ready               => out_ready,
+      out_dvalid              => out_dvalid,
+      out_data                => out_data,
+      out_count               => out_count,
+      out_last                => out_last,
+      out_error               => out_error
     );
 
 end testbench;
