@@ -21,55 +21,39 @@ use ieee.numeric_std.all;
 use ieee.std_logic_textio.all;
 
 library work;
-use work.Stream_pkg.all;
-use work.UtilInt_pkg.all;
-use work.ClockGen_pkg.all;
-use work.StreamSource_pkg.all;
-use work.StreamMonitor_pkg.all;
-use work.StreamSink_pkg.all;
+use work.vhsnunzip_pkg.all;
 
 entity vhsnunzip_tb is
   generic (
-
-    -- The maximum number of data bytes transferred per cycle on the input and
-    -- output streams. This must be a power of two, and must be at least 4.
-    COUNT_MAX               : natural := 64;
-
-    -- Depth of the data buffer. This buffer must be able to store the
-    -- data decompressed so far and the remaining compressed data at all times,
-    -- with a little overhead on top due to line sizes. A 1R1W RAM is inferred
-    -- based on this depth, COUNT_MAX bits wide on both ports.
-    DATA_DEPTH_LOG2_BYTES   : natural := 17
-
+    DUMMY: boolean := false
   );
 end vhsnunzip_tb;
 
 architecture testbench of vhsnunzip_tb is
 
-  constant COUNT_WIDTH          : natural := log2ceil(COUNT_MAX);
-  constant INSERT_RESHAPER      : boolean := true;
-  constant RESHAPER_SPS         : natural := 3;
-  constant RAM_CONFIG           : string := "";
+  signal done       : boolean := false;
 
-  signal done                   : boolean := false;
+  signal clk        : std_logic;
+  signal reset      : std_logic;
 
-  signal clk                    : std_logic;
-  signal reset                  : std_logic;
+  signal co_valid   : std_logic;
+  signal co_ready   : std_logic;
+  signal co_data    : byte_array(0 to 15);
+  signal co_first   : std_logic;
+  signal co_start   : std_logic_vector(3 downto 0);
+  signal co_last    : std_logic;
+  signal co_end     : std_logic_vector(3 downto 0);
 
-  signal in_valid               : std_logic;
-  signal in_ready               : std_logic;
-  signal in_dvalid              : std_logic;
-  signal in_data                : std_logic_vector(COUNT_MAX*8-1 downto 0);
-  signal in_count               : std_logic_vector(COUNT_WIDTH-1 downto 0);
-  signal in_last                : std_logic;
+  signal de_valid   : std_logic;
+  signal de_data    : byte_array(0 to 15);
+  signal de_last    : std_logic;
 
-  signal out_valid              : std_logic;
-  signal out_ready              : std_logic;
-  signal out_dvalid             : std_logic;
-  signal out_data               : std_logic_vector(COUNT_MAX*8-1 downto 0);
-  signal out_count              : std_logic_vector(COUNT_WIDTH-1 downto 0);
-  signal out_last               : std_logic;
-  signal out_error              : std_logic;
+  signal hia_valid  : std_logic;
+  signal hia_ready  : std_logic;
+  signal hia_addr   : std_logic_vector(11 downto 0);
+
+  signal hir_valid  : std_logic;
+  signal hir_data   : byte_array(0 to 31);
 
 begin
 
@@ -95,53 +79,73 @@ begin
   end process;
 
   input_proc: process is
-    constant COUNT_MAX_SLV  : std_logic_vector(COUNT_WIDTH-1 downto 0)
-                            := std_logic_vector(to_unsigned(COUNT_MAX, COUNT_WIDTH));
     file infile             : text;
     variable inline         : line;
     variable count          : natural := 0;
     variable data           : std_logic_vector(7 downto 0);
+    variable page_open      : boolean := false;
+    variable last           : boolean := false;
   begin
-    in_valid  <= '0';
-    in_dvalid <= '1';
-    in_data   <= (others => '0');
-    in_count  <= COUNT_MAX_SLV;
-    in_last   <= '0';
+    co_valid  <= '0';
+    co_data   <= (others => X"00");
+    co_first  <= '0';
+    co_start  <= "0000";
+    co_last   <= '0';
+    co_end    <= "1111";
     wait until falling_edge(reset);
     wait until rising_edge(clk);
     file_open(infile, "input.txt", read_mode);
     while not endfile(infile) loop
-      in_dvalid <= '1';
-      in_data   <= (others => '0');
-      in_count  <= COUNT_MAX_SLV;
-      in_last   <= '0';
+      co_data <= (others => X"00");
+      co_first <= '0';
+      co_start <= "0000";
+      co_last <= '0';
+      co_end <= "1111";
+      last := false;
+
       count := 0;
-      while count < COUNT_MAX loop
+      while count < 16 loop
         readline(infile, inline);
-        if inline.all = "" then
-          in_count <= std_logic_vector(to_unsigned(count, COUNT_WIDTH));
-          if count = 0 then
-            in_dvalid <= '0';
-          else
-            in_dvalid <= '1';
-          end if;
-          in_last <= '1';
-          exit;
-        else
-          read(inline, data);
-          in_data(count*8+7 downto count*8) <= data;
-          count := count + 1;
+
+        -- Handle "last" marker.
+        if inline.all = "last:" then
+          co_last <= '1';
+          co_end <= std_logic_vector(to_unsigned(count, 4));
+          page_open := false;
+          last := true;
+          readline(infile, inline);
         end if;
+
+        -- Read data.
+        read(inline, data);
+        co_data(count) <= data;
+        count := count + 1;
+
+        -- Read the empty line at the end of a block.
+        if last then
+          readline(infile, inline);
+          assert inline.all = "" severity failure;
+          exit;
+        end if;
+
+        -- Start one byte after the first byte with zero LSB.
+        if not page_open and data(7) = '0' then
+          co_first <= '1';
+          co_start <= std_logic_vector(to_unsigned(count, 4));
+          page_open := true;
+        end if;
+
       end loop;
-      in_valid <= '1';
+
+      co_valid <= '1';
       loop
         wait until rising_edge(clk);
-        exit when in_ready = '1';
+        exit when co_ready = '1';
       end loop;
-      in_valid <= '0';
+      co_valid <= '0';
     end loop;
     file_close(infile);
-    in_valid <= '0';
+    co_valid <= '0';
     wait for 100 us;
     done <= true;
     wait;
@@ -153,67 +157,55 @@ begin
     variable count          : natural := 0;
     variable data           : std_logic_vector(7 downto 0);
   begin
-    out_ready <= '0';
     wait until falling_edge(reset);
     wait until rising_edge(clk);
     file_open(outfile, "output.txt", write_mode);
     loop
-      out_ready <= '1';
+
       loop
         wait until rising_edge(clk);
-        exit when out_valid = '1';
+        exit when de_valid = '1';
       end loop;
-      out_ready <= '0';
 
-      count := to_integer(unsigned(out_count));
-      if count = 0 then
-        count := COUNT_MAX;
-      end if;
-      if out_dvalid = '0' then
-        count := 0;
-      end if;
-      for i in 0 to count - 1 loop
-        write(outline, out_data(i*8+7 downto i*8));
+      for i in 0 to 15 loop
+        write(outline, de_data(i));
         writeline(outfile, outline);
       end loop;
-      if out_last = '1' then
-        if out_error = '1' then
-          write(outline, string'("error"));
-        end if;
+
+      if de_last = '1' then
+        --if de_error = '1' then
+        --  write(outline, string'("error"));
+        --end if;
         writeline(outfile, outline);
-      else
-        assert count = COUNT_MAX report "output not normalized" severity failure;
       end if;
+
     end loop;
   end process;
 
-  out_ready <= '1';
-
-  uut: entity work.vhsnunzip
-    generic map (
-      COUNT_MAX               => COUNT_MAX,
-      COUNT_WIDTH             => COUNT_WIDTH,
-      INSERT_RESHAPER         => INSERT_RESHAPER,
-      RESHAPER_SPS            => RESHAPER_SPS,
-      DATA_DEPTH_LOG2_BYTES   => DATA_DEPTH_LOG2_BYTES,
-      RAM_CONFIG              => RAM_CONFIG
-    )
+  uut: entity work.vhsnunzip_decode
     port map (
-      clk                     => clk,
-      reset                   => reset,
-      in_valid                => in_valid,
-      in_ready                => in_ready,
-      in_dvalid               => in_dvalid,
-      in_data                 => in_data,
-      in_count                => in_count,
-      in_last                 => in_last,
-      out_valid               => out_valid,
-      out_ready               => out_ready,
-      out_dvalid              => out_dvalid,
-      out_data                => out_data,
-      out_count               => out_count,
-      out_last                => out_last,
-      out_error               => out_error
+      clk       => clk,
+      reset     => reset,
+
+      co_valid  => co_valid,
+      co_ready  => co_ready,
+      co_data   => co_data,
+      co_first  => co_first,
+      co_start  => co_start,
+      co_last   => co_last,
+      co_end    => co_end,
+
+      de_valid  => de_valid,
+      de_data   => de_data,
+      de_last   => de_last,
+
+      hia_valid => hia_valid,
+      hia_ready => hia_ready,
+      hia_addr  => hia_addr,
+
+      hir_valid => hir_valid,
+      hir_data  => hir_data
+
     );
 
 end testbench;

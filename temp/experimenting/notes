@@ -1,0 +1,160 @@
+Element length:
+ - First "element" = varint for uncompressed length
+    - If 0.7 = 0 -> size = 1
+    - If 1.7 = 0 -> size = 2
+    - If 2.7 = 0 -> size = 3
+    - If 3.7 = 0 -> size = 4
+    - Else       -> size = 5
+ - Later elements:
+    - If 0.1:0 = 00 ->
+       - If 0.7:2 = 111111 -> size = 6 + (4 & 3 & 2 & 1)
+       - If 0.7:2 = 111110 -> size = 5 + (3 & 2 & 1)
+       - If 0.7:2 = 111101 -> size = 4 + (2 & 1)
+       - If 0.7:2 = 111100 -> size = 3 + (1)
+       - Else              -> size = 2 + (0.7:2)
+    - If 0.1:0 == 01       -> size = 2
+    - If 0.1:0 == 10       -> size = 3
+    - If 0.1:0 == 11       -> size = 5
+
+
+.
+
+element slicer output per decoder:
+ - compressed element size in bytes
+ - compressed element offset in element stream
+ - compressed element stream (bus width in size)
+ - uncompressed element size in bytes
+ - uncompressed element offset in output stream
+
+.
+
+
+ - element length is dependent on the next 5 bytes. so we need a lookahead bus
+   word to decode elements starting at the last 4 positions in the bus word.
+
+
+generics:
+ - bus width in bytes
+ - elements decoded per cycle
+
+
+
+
+
+Following unit has 12 levels of logic and 3.167ns path delay for critical path (VU3P-2).
+It returns the validity and index of the next copy element, the validity,
+index, and length of the next literal element, and computes the index for the
+next cycle, all in one go. So there's no reason to make this more complicated
+with parallel bullshit and stuff, and 12 levels of logic is perfectly fine!
+Note that F7MUX and F8MUX are both counted as a level of logic, so this is not
+entirely fair. Single LUT latency seems to be around 150ps, and for this design
+net delay is about 2x the logic delay.
+
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity top is
+  port (
+    clk         : in  std_logic;
+    reset       : in  std_logic;
+
+    data_i      : in  std_logic_vector(143 downto 0);
+
+    cp_valid_o  : out std_logic;
+    cp_index_o  : out std_logic_vector(3 downto 0);
+
+    li_valid_o  : out std_logic;
+    li_index_o  : out std_logic_vector(3 downto 0);
+    li_len_o    : out std_logic_vector(15 downto 0);
+
+    err_o       : out std_logic
+  );
+end entity top;
+
+architecture behavior of top is
+begin
+  banana: process (clk) is
+    type byte_array is array (natural range <>) of std_logic_vector(7 downto 0);
+    variable data     : byte_array(0 to 17);
+    variable li_hdr   : byte_array(0 to 2);
+    variable index    : unsigned(3 downto 0);
+    variable cp_valid : std_logic;
+    variable cp_index : unsigned(3 downto 0);
+    variable li_valid : std_logic;
+    variable li_index : unsigned(3 downto 0);
+    variable li_len   : unsigned(15 downto 0);
+    variable err      : std_logic;
+  begin
+    if rising_edge(clk) then
+      cp_valid_o <= cp_valid;
+      cp_index_o <= std_logic_vector(cp_index);
+      li_valid_o <= li_valid;
+      li_index_o <= std_logic_vector(li_index);
+      li_len_o   <= std_logic_vector(li_len);
+
+      -- Check for copy element/check width.
+      cp_index := index;
+      case data(to_integer(index))(1 downto 0) is
+        when "00" =>
+          cp_valid := '0';
+        when "01" =>
+          cp_valid := '1';
+          index := index + 2;
+        when "10" =>
+          cp_valid := '1';
+          index := index + 3;
+        when others =>
+          cp_valid := '0';
+          err := '1';
+      end case;
+
+      li_index := index;
+      li_hdr(0) := data(to_integer(index));
+      li_hdr(1) := data(to_integer(index) + 1);
+      li_hdr(2) := data(to_integer(index) + 2);
+
+      if li_hdr(0)(1 downto 0) = "00" then
+        li_valid := '1';
+        if li_hdr(0) = "11110000" then
+          -- Literal with 2-byte header.
+          li_len := X"00" & unsigned(li_hdr(1));
+          index := index + 2;
+        elsif li_hdr(0) = "11110100" then
+          -- Literal with 3-byte header.
+          li_len := unsigned(li_hdr(2)) & unsigned(li_hdr(1));
+          index := index + 3;
+        else
+          -- Literal with 1-byte header.
+          li_len := X"00" & "00" & unsigned(li_hdr(0)(7 downto 2));
+          index := index + 1;
+        end if;
+        if li_hdr(0)(7 downto 3) = "11111" then
+          li_valid := '0';
+          err := '1';
+        end if;
+        li_len := li_len + 1;
+      else
+        -- Copy element.
+        li_valid := '0';
+        li_len := X"0000";
+      end if;
+
+      index := index + li_len(3 downto 0);
+
+      if reset = '1' then
+        data     := (others => X"00");
+        index    := "0000";
+        cp_valid := '0';
+        cp_index := "0000";
+        li_valid := '0';
+        li_index := "0000";
+        err      := '0';
+      end if;
+      for i in 0 to 17 loop
+        data(i) := data_i(i*8+7 downto i*8);
+      end loop;
+    end if;
+  end process;
+end architecture behavior;

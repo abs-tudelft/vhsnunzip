@@ -88,14 +88,15 @@ with tempfile.TemporaryDirectory() as tempdir:
     # Write the compressed data to a VHDL-friendly file format.
     with open(pjoin(tempdir, 'input.txt'), 'w') as fout:
         for chunk in compressed_chunks:
-            for byte in chunk:
+            for byte in chunk[:-1]:
                 fout.write('{:08b}\n'.format(byte))
+            fout.write('last:\n')
+            fout.write('{:08b}\n'.format(chunk[-1]))
             fout.write('\n')
 
     # Write the test case.
     generics = {
-        'COUNT_MAX': keys.pop('width', '4'),
-        'DATA_DEPTH_LOG2_BYTES': keys.pop('depth', '16'),
+        'DUMMY': 'false',
     }
     generics = ', '.join(['%s => %s' % x for x in generics.items()])
     with open(pjoin(tempdir, 'vhsnunzip_tc.sim.08.vhd'), 'w') as fout:
@@ -127,18 +128,18 @@ with tempfile.TemporaryDirectory() as tempdir:
 
     # Check the output.
     for ci, (exp_chunk, act_chunk) in enumerate(
-            itertools.zip_longest(uncompressed_chunks, uncompressed_chunks_out)):
+            itertools.zip_longest(compressed_chunks, uncompressed_chunks_out)):
         if exp_chunk is None:
             print('error: spurious chunk in output')
             sys.exit(1)
         if act_chunk is None:
-            print('error: missing chunk in output')
+            print('error: missing chunk %d in output' % ci)
             sys.exit(1)
         for bi, (exp_byte, act_byte) in enumerate(
                 itertools.zip_longest(exp_chunk, act_chunk)):
             if exp_byte is None:
-                print('error: spurious byte in chunk %d: 0x%02X' % (ci, act_byte))
-                sys.exit(1)
+                print('note: spurious byte(s) in chunk %d: 0x%02X' % (ci, act_byte))
+                break
             if act_byte is None:
                 print('error: missing byte in chunk %d' % ci)
                 sys.exit(1)

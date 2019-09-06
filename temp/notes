@@ -1,0 +1,17 @@
+
+
+
+
+A) 32x16B LUTRAM FIFO + 1 reg ~ 64 LUTs
+B) 20B-to-5B wide byte-granular shifter (16 taps) ~ 160 LUTs (using F7MUX and F8MUX)
+C) 31B-to-16B wide byte-granular shifter (16 taps) ~ 512 LUTs
+
+
+Input FIFO:                     A =   64 LUTs
+Copy element aligner:           B =  160 LUTs
+Literal element header aligner: B =  160 LUTs
+Literal element data aligner:   C =  512 LUTs
+Copy element data aligner:      C =  512 LUTs
+Write lookahead:                A =   64 LUTs
+
+Budget:                             2000 LUTs

@@ -1,0 +1,48 @@
+URAM array access:
+
+ - compressed stream input:
+    - A = write low data
+    - B = write high data
+
+ - decompressed stream output:
+    - A = read low data
+    - B = read high data
+
+ - decompressor access:
+    - A = read compressed data into LUTRAM FIFO or write decompressed data from LUTRAM FIFO
+    - B = read decompression history data
+
+
+
+RAM array access:
+
+ - during initialization:
+    - A = write compressed input data low from input stream
+    - B = write compressed input data high from input stream
+
+ - during decompression:
+    - A = read compressed data into LUTRAM FIFO to decoder
+        | write decompressed data from LUTRAM FIFO from decoder
+        | read decompressed output data low into LUTRAM FIFO to output stream
+    - B = read decompressed history data
+        | read decompressed output data high into LUTRAM FIFO to output stream
+
+   Arbitration should be based on LUTRAM FIFO levels. Although it'd be nice to
+   avoid clock enables on the pipeline... in which case reading decompressed
+   history must always take precedence.
+
+
+
+
+Huh, the LUTRAM FIFOs can be SRL16s, can't they? The address input just becomes
+the FIFO count, which is ideal, because then I don't need read/write pointers
+and don't need independent read/write addresses! Awesome!
+
+So I need four 16-byte wide LUTRAM FIFOs based on SRL16s. That's 512 SRL16s, or
+256 SLICEM LUTs. Oof.
+
+
+
+Alternatively, limit to 8 bytes per cycle to practically divide LUT count by
+two. Will probably be a lot better matched... but will the performance be
+worth it?
