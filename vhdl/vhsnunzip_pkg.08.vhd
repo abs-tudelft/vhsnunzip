@@ -4,7 +4,66 @@ use ieee.numeric_std.all;
 
 package vhsnunzip_pkg is
 
+  -- Generic array of bytes.
   type byte_array is array (natural range <>) of std_logic_vector(7 downto 0);
+
+  -- Payload of the compressed data stream.
+  type compressed_stream_payload is record
+
+    -- Compressed data line.
+    data      : byte_array(0 to 7);
+
+    -- Asserted to mark the last line of a chunk.
+    last      : std_logic;
+
+    -- Index of the last valid byte. Assumed to be 7 when last is not asserted.
+    endi      : std_logic_vector(2 downto 0);
+
+  end record;
+
+  -- Snappy element information and literal data stream.
+  type element_stream_payload is record
+
+    -- Whether the copy element info is valid.
+    cp_valid  : std_logic;
+
+    -- The byte offset for the copy as encoded by the element header.
+    cp_offs   : std_logic_vector(15 downto 0);
+
+    -- The DIMINISHED-ONE length of the copy as encoded by the element header.
+    cp_len    : std_logic_vector(5 downto 0);
+
+    -- Whether the literal element info is valid.
+    li_valid  : std_logic;
+
+    -- The starting byte offset within the current li_data for the literal.
+    li_offs   : std_logic_vector(3 downto 0);
+
+    -- The DIMINISHED-ONE length of the literal as encoded by the element
+    -- header.
+    li_len    : std_logic_vector(15 downto 0);
+
+    -- Literal data line pair.
+    li_data   : byte_array(0 to 15);
+
+    -- Indicator for first set of elements in chunk.
+    first     : std_logic;
+
+    -- Indicator for last set of elements/literal data in chunk.
+    last      : std_logic;
+
+  end record;
+
+  -- Returns 'U' during simulation, but '0' during synthesis.
+  function undef_fn return std_logic is
+    variable undef: std_logic := '0';
+  begin
+    -- pragma translate_off
+    undef := 'U';
+    -- pragma translate_on
+    return undef;
+  end function;
+  constant UNDEF    : std_logic := undef_fn;
 
   component vhsnunzip_srl is
     generic (
