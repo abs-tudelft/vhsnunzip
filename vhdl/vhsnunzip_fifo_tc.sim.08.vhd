@@ -48,7 +48,7 @@ begin
 
   uut: vhsnunzip_fifo
     generic map (
-      WIDTH                     => 1
+      DATA_WIDTH                => 1
     )
     port map (
       clk                       => clk,
