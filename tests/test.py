@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
-import sys
-import os
-from os.path import join as pjoin
-import tempfile
-import subprocess
-import itertools
 import random
+import sys
 import vhdeps
+import itertools
+from emu.operators import *
+from emu.snappy import compress
 
 # Parse command line.
 def usage():
@@ -29,121 +27,46 @@ except (StopIteration, ValueError):
 random.seed(keys.pop('seed', 0))
 
 # Read uncompressed file into memory.
+print('Reading input...')
 with open(fname, 'rb') as fin:
     data = fin.read()
 
-TESTCASE_VHD = """
-library work;
+# Chunk it up randomly.
+print('Compressing input...')
+chunk_size = int(keys.pop('chunk', '65536'), 0)
+compressed, uncompressed = compress(
+    data, 'tools/bin',
+    min_chunk_size=int(keys.pop('min_chunk', str(chunk_size)), 0),
+    max_chunk_size=int(keys.pop('max_chunk', str(chunk_size)), 0),
+    max_prob=float(keys.pop('max_prob', '0')),
+    verify=keys.pop('verify', None) != None)
 
-entity vhsnunzip_tc is
-end vhsnunzip_tc;
+print('Simulating decompression in Python...')
+cs = Counter(writer(data_source(compressed), '../vhdl/cs.tv'))
+cd = Counter(writer(pre_decoder(cs), '../vhdl/cd.tv'))
+el = Counter(writer(decoder(cd), '../vhdl/el.tv'))
+cm = Counter(writer(cmd_gen(el), '../vhdl/cm.tv'))
+de = Counter(writer(datapath(cm), '../vhdl/de.tv'))
+for _ in verifier(de, uncompressed):
+    pass
 
--- pragma simulation timeout 100 ms
+# Run vhdeps.
+print('Checking that VHDL and Python streams match...')
+code = vhdeps.run_cli([
+    vhdeps_target,
+    'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_tc',
+    '-i', '..'] + vhdeps_args)
+if code != 0:
+    sys.exit(code)
 
-architecture TestVector of vhsnunzip_tc is
-begin
+print()
+print('Statistics:')
+print('  Uncompressed size=%d, compressed size=%d, chunk count=%d' % (
+    len(data), sum(map(len, compressed)), len(compressed)))
+print('  Stream transfer counts: cs=%d, cd=%d, el=%d, cm=%d, de=%d' % (
+    cs.count, cd.count, el.count, cm.count, de.count))
+print('  Approx. bytes/cycle: %.3f' % (
+    len(data) / cm.count))
 
-  tb_inst: entity work.vhsnunzip_tb
-    generic map ({generics});
-
-end TestVector;
-"""
-
-with tempfile.TemporaryDirectory() as tempdir:
-
-    # Split the file up into chunks.
-    chunk_size = int(keys.pop('chunk', '65536'), 0)
-    max_chunk_size = int(keys.pop('max_chunk', str(chunk_size)), 0)
-    min_chunk_size = int(keys.pop('min_chunk', str(chunk_size)), 0)
-    verify = keys.pop('verify', None) != None
-    offset = 0
-    uncompressed_chunks = []
-    compressed_chunks = []
-    while offset < len(data):
-        print('compressing chunk %d...' % len(compressed_chunks), end='\r')
-
-        uncompressed_chunk = data[offset:offset + random.randint(min_chunk_size, max_chunk_size)]
-
-        # Compress the chunk using snzip and check decompression with snunzip.
-        with open(pjoin(tempdir, 'data'), 'wb') as fout:
-            fout.write(uncompressed_chunk)
-        subprocess.check_call(['tools/bin/snzip', '-traw', pjoin(tempdir, 'data')])
-        with open(pjoin(tempdir, 'data.raw'), 'rb') as fin:
-            compressed_chunk = fin.read()
-        if verify:
-            subprocess.check_call(['tools/bin/snunzip', '-traw', pjoin(tempdir, 'data.raw')])
-            with open(pjoin(tempdir, 'data'), 'rb') as fin:
-                assert fin.read() == uncompressed_chunk
-            os.unlink(pjoin(tempdir, 'data'))
-        else:
-            os.unlink(pjoin(tempdir, 'data.raw'))
-
-        offset += len(uncompressed_chunk)
-        uncompressed_chunks.append(uncompressed_chunk)
-        compressed_chunks.append(compressed_chunk)
-    print()
-    print('uncompressed size: %d' % sum(map(len, uncompressed_chunks)))
-    print('compressed size: %d' % sum(map(len, compressed_chunks)))
-
-    # Write the compressed data to a VHDL-friendly file format.
-    with open(pjoin(tempdir, 'input.txt'), 'w') as fout:
-        for chunk in compressed_chunks:
-            for byte in chunk[:-1]:
-                fout.write('{:08b}\n'.format(byte))
-            fout.write('last:\n')
-            fout.write('{:08b}\n'.format(chunk[-1]))
-            fout.write('\n')
-
-    # Write the test case.
-    generics = {
-        'DUMMY': 'false',
-    }
-    generics = ', '.join(['%s => %s' % x for x in generics.items()])
-    with open(pjoin(tempdir, 'vhsnunzip_tc.sim.08.vhd'), 'w') as fout:
-        fout.write(TESTCASE_VHD.format(generics=generics))
-
-    # Run vhdeps.
-    code = vhdeps.run_cli([
-        vhdeps_target, 'vhsnunzip_tc',
-        '-i', '..', '-i', tempdir] + vhdeps_args)
-    if code != 0:
-        sys.exit(code)
-
-    # Read the output file.
-    uncompressed_chunks_out = [[]]
-    with open(pjoin(tempdir, 'output.txt'), 'r') as fin:
-        for line in fin.read().split('\n')[:-1]:
-            if line in ('', 'error'):
-                if line == 'error':
-                    print('decompression error for chunk %d' % (len(uncompressed_chunks_out) - 1))
-                uncompressed_chunks_out[-1] = bytes(uncompressed_chunks_out[-1])
-                uncompressed_chunks_out.append([])
-            else:
-                try:
-                    uncompressed_chunks_out[-1].append(int(line, 2))
-                except ValueError:
-                    print('error parsing output - U or X bit?')
-                    sys.exit(1)
-    uncompressed_chunks_out = uncompressed_chunks_out[:-1]
-
-    # Check the output.
-    for ci, (exp_chunk, act_chunk) in enumerate(
-            itertools.zip_longest(compressed_chunks, uncompressed_chunks_out)):
-        if exp_chunk is None:
-            print('error: spurious chunk in output')
-            sys.exit(1)
-        if act_chunk is None:
-            print('error: missing chunk %d in output' % ci)
-            sys.exit(1)
-        for bi, (exp_byte, act_byte) in enumerate(
-                itertools.zip_longest(exp_chunk, act_chunk)):
-            if exp_byte is None:
-                print('note: spurious byte(s) in chunk %d: 0x%02X' % (ci, act_byte))
-                break
-            if act_byte is None:
-                print('error: missing byte in chunk %d' % ci)
-                sys.exit(1)
-            if exp_byte != act_byte:
-                print('error: byte %d in chunk %d should be 0x%02X but was 0x%02X'
-                      % (bi, ci, exp_byte, act_byte))
-                sys.exit(1)
+print()
+print('All good!')

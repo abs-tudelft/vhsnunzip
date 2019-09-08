@@ -39,7 +39,7 @@ entity vhsnunzip_fifo is
     -- FIFO level. This is diminished-one-encoded! That is, -1 is empty, 0 is
     -- one valid entry, etc. This has to do with how Xilinx SRL primitive read
     -- addresses work.
-    level       : out std_logic_vector(DEPTH_LOG2 downto 0);
+    level       : out unsigned(DEPTH_LOG2 downto 0);
 
     -- Empty and full status signals, derived from level.
     empty       : out std_logic;
@@ -51,7 +51,7 @@ end vhsnunzip_fifo;
 architecture behavior of vhsnunzip_fifo is
 
   -- Internal copy of the FIFO level, see level port for more info.
-  signal level_s  : std_logic_vector(DEPTH_LOG2 downto 0) := (others => '1');
+  signal level_s  : unsigned(DEPTH_LOG2 downto 0) := (others => '1');
 
   -- Internal copies of the empty and full status signals.
   signal empty_s  : std_logic;
@@ -75,14 +75,14 @@ begin
     if rising_edge(clk) then
 
       -- Update the counter.
-      level_v := unsigned(level_s);
+      level_v := level_s;
       if rd_ena = '1' then
         level_v := level_v - 1;
       end if;
       if wr_ena = '1' then
         level_v := level_v + 1;
       end if;
-      level_s <= std_logic_vector(level_v);
+      level_s <= level_v;
 
       -- Precompute the full signal and store it in a register.
       if level_v = 2**DEPTH_LOG2-1 then

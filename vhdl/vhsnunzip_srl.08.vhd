@@ -25,7 +25,7 @@ entity vhsnunzip_srl is
     -- Read data output. Address 0 corresponds to the most recent write,
     -- address 1 corresponds to the one before that, and so on. The address is
     -- combinatorial!
-    rd_addr     : in  std_logic_vector(DEPTH_LOG2-1 downto 0) := (others => '0');
+    rd_addr     : in  unsigned(DEPTH_LOG2-1 downto 0) := (others => '0');
     rd_data     : out std_logic_vector(WIDTH-1 downto 0)
 
   );
@@ -46,6 +46,6 @@ begin
     end if;
   end process;
 
-  rd_data <= memory(to_integer(unsigned(rd_addr)));
+  rd_data <= memory(to_integer(rd_addr));
 
 end behavior;

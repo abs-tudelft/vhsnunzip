@@ -68,10 +68,10 @@ def parallelized_stream(compressed):
 _ElementStream = namedtuple('ElementStream', [
     'cp_valid', # whether the copy element info is valid
     'cp_offs',  # the byte offset for the copy as encoded by the element header
-    'cp_len',   # the length of the copy as encoded by the element header
+    'cp_len',   # the length of the copy as encoded by the element header, diminished-one
     'li_valid', # whether the literal element info is valid
     'li_offs',  # the starting byte offset within the current li_data for the literal
-    'li_len',   # the length of the literal as encoded by the element header
+    'li_len',   # the length of the literal as encoded by the element header, diminished-one
     'li_data',  # literal data (2*WI bytes)
     'first',    # indicator for first set of elements in chunk
     'last',     # indicator for last set of elements/literal data in chunk
@@ -113,12 +113,12 @@ def element_stream(parallelized):
         elif data[co_offs_mod] & 3 == 1:
             cp_valid = True
             cp_offs = (((data[co_offs_mod] >> 5) & 7) << 8) | data[co_offs_mod+1]
-            cp_len = ((data[co_offs_mod] >> 2) & 7) + 4
+            cp_len = ((data[co_offs_mod] >> 2) & 7) + 3
             co_offs += 2
         elif data[co_offs_mod] & 3 == 2:
             cp_valid = True
             cp_offs = data[co_offs_mod+1] | (data[co_offs_mod+2] << 8)
-            cp_len = ((data[co_offs_mod] >> 2) & 63) + 1
+            cp_len = (data[co_offs_mod] >> 2) & 63
             co_offs += 3
         elif data[co_offs_mod] & 3 == 3:
             raise ValueError('oh_snap')
@@ -139,11 +139,10 @@ def element_stream(parallelized):
                 raise ValueError('oh_snap')
         else:
             li_hdlen = 1
-        li_len += 1
         li_offs = co_offs + li_hdlen
 
         if li_valid:
-            co_offs += li_hdlen + li_len
+            co_offs += li_hdlen + li_len + 1
 
         # Check if we need to pull in new data in the next cycle and preadjust
         # the offset accordingly.
@@ -176,10 +175,10 @@ def test_element_stream(elements, golden):
                 push(el.li_data[i])
                 li_remain -= 1
         if el.cp_valid:
-            for i in range(el.cp_len):
+            for i in range(el.cp_len + 1):
                 push(decompressed[-el.cp_offs])
         if el.li_valid:
-            li_remain = el.li_len
+            li_remain = el.li_len + 1
             for i in range(el.li_offs, WI*2):
                 if not li_remain:
                     break
@@ -259,20 +258,21 @@ def command_stream(elements):
         # If we're out of stuff to do, load the next commands.
         if not cp_len and not li_len:
             if cp_pend:
-                cp_len = el.cp_len
+                cp_len = el.cp_len + 1
                 cp_offs = el.cp_offs
                 cp_pend = False
             if li_pend:
-                li_len = el.li_len
+                li_len = el.li_len + 1
                 li_offs = el.li_offs
                 li_pend = False
 
-        # Amount of bytes we can write in this cycle.
+        # Amount of bytes we can write in this cycle. Selecting the first line
+        # disables the output forwarding register.
         #budget = WI - de_offs
         budget = WI
 
         # Handle copy data.
-        if cp_offs == 1:
+        if True and cp_offs == 1:
 
             # Special case for single-byte repetition, since it's relatively
             # common and otherwise has worst-case 1-byte/cycle performance.
@@ -305,6 +305,11 @@ def command_stream(elements):
             for i in range(cp_chunk_len):
                 strb[de_offs + i] = True
                 src[(de_offs + i) % WI] = 1
+
+            # If this is a run-length encoded block, increase the run length
+            # after each copy; we can reuse the bytes we already wrote!
+            if cp_chunk_len == cp_offs and cp_offs <= 4:
+                cp_offs <<= 1
 
         # Update state for copy.
         de_offs += cp_chunk_len
@@ -782,6 +787,9 @@ def test_command_stream(cmds, golden):
 import os
 import itertools
 
+total_accum = 0
+total_count = 0
+
 for fname in os.listdir('.'):
     if fname.startswith('bench-') and fname.endswith('.raw'):
 
@@ -794,9 +802,8 @@ for fname in os.listdir('.'):
         parallelized = list(parallelized_stream(compressed))
 
         print('checking...')
-        es = element_stream(parallelized)
-        #test_element_stream(es, fname[:-4] + '.bin')
-        test_command_stream(command_stream(es), fname[:-4] + '.bin')
+        test_element_stream(element_stream(parallelized), fname[:-4] + '.bin')
+        test_command_stream(command_stream(element_stream(parallelized)), fname[:-4] + '.bin')
         print('\033[Achecking... correct!')
 
         print('calc performance...')
@@ -814,8 +821,11 @@ for fname in os.listdir('.'):
         print('decomp writes =', count)
         print('long term reads =', long_term_reads)
         print()
+        total_accum += accum
+        total_count += count
 
 
+print('avg bytes/cycle for all benchmarks =', total_accum / total_count)
 
 #.
 
