@@ -68,38 +68,30 @@ begin
         offn := resize(off(2 downto 0), 17);
         ofi := to_integer(offn(2 downto 0));
 
-        if offn > cdh.endi then
+        case cdh.data(ofi)(1 downto 0) is
 
-          -- No element (for now); beyond end of stream or starts on the next
-          -- line.
-          elh.cp_val := '0';
+          when "01" =>
+            -- 2-byte copy element.
+            elh.cp_val := '1';
+            offn := offn + 2;
 
-        else
-          case cdh.data(ofi)(1 downto 0) is
+          when "10" =>
+            -- 3-byte copy element.
+            elh.cp_val := '1';
+            offn := offn + 3;
 
-            when "01" =>
-              -- 2-byte copy element.
-              elh.cp_val := '1';
-              offn := offn + 2;
+          when "11" =>
+            -- 5-byte copy element. Note that we ignore byte 4 and 5; they
+            -- should be zero! Otherwise they'd encode an offset beyond
+            -- 64kiB, and we can't decompress chunks larger than that.
+            elh.cp_val := '1';
+            offn := offn + 5;
 
-            when "10" =>
-              -- 3-byte copy element.
-              elh.cp_val := '1';
-              offn := offn + 3;
+          when others =>
+            -- Literal element.
+            elh.cp_val := '0';
 
-            when "11" =>
-              -- 5-byte copy element. Note that we ignore byte 4 and 5; they
-              -- should be zero! Otherwise they'd encode an offset beyond
-              -- 64kiB, and we can't decompress chunks larger than that.
-              elh.cp_val := '1';
-              offn := offn + 5;
-
-            when others =>
-              -- Literal element.
-              elh.cp_val := '0';
-
-          end case;
-        end if;
+        end case;
 
         if cdh.data(ofi)(1) = '0' then
           -- 2-byte copy element, or not a copy.
@@ -164,11 +156,12 @@ begin
         ---------------------------------------------------------------------
 
         -- Invalidate the decoded elements if we were actually decoding
-        -- literal data from a previously decoded literal. All of the above
-        -- could actually go inside this if statement, but by doing it this
-        -- way, the decoded header information is independent of the result
-        -- of the condition (only the valid bits are).
-        if off(16 downto 3) /= 0 then
+        -- literal data from a previously decoded literal, or if both elements
+        -- were beyond the end of the stream. All of the above could actually
+        -- go inside this if statement, but by doing it this way, the decoded
+        -- header information is independent of the result of the condition
+        -- (only the valid bits are).
+        if off > cdh.endi then
           elh.cp_val := '0';
           elh.li_val := '0';
         else
