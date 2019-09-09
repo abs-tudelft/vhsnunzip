@@ -285,6 +285,8 @@ package vhsnunzip_pkg is
 
   end record;
 
+  procedure stream_des(l: inout line; value: out command_stream; to_x: boolean);
+
   constant COMMAND_STREAM_INIT : command_stream := (
     valid     => '0',
     lt_val    => UNDEF,
@@ -300,6 +302,20 @@ package vhsnunzip_pkg is
     ld_pop    => UNDEF,
     last      => UNDEF
   );
+
+  -- Decompression datapath command generator.
+  component vhsnunzip_cmd_gen is
+    port (
+      clk         : in  std_logic;
+      reset       : in  std_logic;
+      el          : in  element_stream;
+      el_ready    : out std_logic;
+      lt_off_ld   : in  std_logic := '1';
+      lt_off      : in  unsigned(12 downto 0) := (others => '0');
+      cm          : out command_stream;
+      cm_ready    : in  std_logic
+    );
+  end component;
 
 end package vhsnunzip_pkg;
 
@@ -323,11 +339,9 @@ package body vhsnunzip_pkg is
       end if;
     end loop;
     read(l, value.last);
-    if to_x then
-      value.last := to_x01(value.last);
-    end if;
     read(l, value.endi);
     if to_x then
+      value.last := to_x01(value.last);
       value.endi := to_x01(value.endi);
     end if;
     value.valid := '1';
@@ -342,19 +356,13 @@ package body vhsnunzip_pkg is
       end if;
     end loop;
     read(l, value.first);
-    if to_x then
-      value.first := to_x01(value.first);
-    end if;
     read(l, value.start);
-    if to_x then
-      value.start := to_x01(value.start);
-    end if;
     read(l, value.last);
-    if to_x then
-      value.last := to_x01(value.last);
-    end if;
     read(l, value.endi);
     if to_x then
+      value.first := to_x01(value.first);
+      value.start := to_x01(value.start);
+      value.last := to_x01(value.last);
       value.endi := to_x01(value.endi);
     end if;
     value.valid := '1';
@@ -363,35 +371,52 @@ package body vhsnunzip_pkg is
   procedure stream_des(l: inout line; value: out element_stream; to_x: boolean) is
   begin
     read(l, value.cp_val);
-    if to_x then
-      value.cp_val := to_x01(value.cp_val);
-    end if;
     read(l, value.cp_off);
-    if to_x then
-      value.cp_off := to_x01(value.cp_off);
-    end if;
     read(l, value.cp_len);
-    if to_x then
-      value.cp_len := to_x01(value.cp_len);
-    end if;
     read(l, value.li_val);
-    if to_x then
-      value.li_val := to_x01(value.li_val);
-    end if;
     read(l, value.li_off);
-    if to_x then
-      value.li_off := to_x01(value.li_off);
-    end if;
     read(l, value.li_len);
-    if to_x then
-      value.li_len := to_x01(value.li_len);
-    end if;
     read(l, value.ld_pop);
-    if to_x then
-      value.ld_pop := to_x01(value.ld_pop);
-    end if;
     read(l, value.last);
     if to_x then
+      value.cp_val := to_x01(value.cp_val);
+      value.cp_off := to_x01(value.cp_off);
+      value.cp_len := to_x01(value.cp_len);
+      value.li_val := to_x01(value.li_val);
+      value.li_off := to_x01(value.li_off);
+      value.li_len := to_x01(value.li_len);
+      value.ld_pop := to_x01(value.ld_pop);
+      value.last := to_x01(value.last);
+    end if;
+    value.valid := '1';
+  end procedure;
+
+  procedure stream_des(l: inout line; value: out command_stream; to_x: boolean) is
+  begin
+    read(l, value.lt_val);
+    read(l, value.lt_adev);
+    read(l, value.lt_adod);
+    read(l, value.lt_swap);
+    read(l, value.st_addr);
+    read(l, value.cp_rol);
+    read(l, value.cp_rle);
+    read(l, value.cp_end);
+    read(l, value.li_rol);
+    read(l, value.li_end);
+    read(l, value.ld_pop);
+    read(l, value.last);
+    if to_x then
+      value.lt_val := to_x01(value.lt_val);
+      value.lt_adev := to_x01(value.lt_adev);
+      value.lt_adod := to_x01(value.lt_adod);
+      value.lt_swap := to_x01(value.lt_swap);
+      value.st_addr := to_x01(value.st_addr);
+      value.cp_rol := to_x01(value.cp_rol);
+      value.cp_rle := to_x01(value.cp_rle);
+      value.cp_end := to_x01(value.cp_end);
+      value.li_rol := to_x01(value.li_rol);
+      value.li_end := to_x01(value.li_end);
+      value.ld_pop := to_x01(value.ld_pop);
       value.last := to_x01(value.last);
     end if;
     value.valid := '1';

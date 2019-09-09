@@ -9,33 +9,33 @@ use ieee.math_real.all;
 library work;
 use work.vhsnunzip_pkg.all;
 
-entity vhsnunzip_decoder_tc is
-end vhsnunzip_decoder_tc;
+entity vhsnunzip_cmd_gen_tc is
+end vhsnunzip_cmd_gen_tc;
 
-architecture testcase of vhsnunzip_decoder_tc is
+architecture testcase of vhsnunzip_cmd_gen_tc is
 
   signal clk        : std_logic := '0';
   signal reset      : std_logic := '1';
   signal done       : boolean := false;
 
-  signal cd         : compressed_stream_double := COMPRESSED_STREAM_DOUBLE_INIT;
-  signal cd_ready   : std_logic := '0';
-
   signal el         : element_stream := ELEMENT_STREAM_INIT;
   signal el_ready   : std_logic := '0';
 
-  signal el_exp     : element_stream := ELEMENT_STREAM_INIT;
+  signal cm         : command_stream := COMMAND_STREAM_INIT;
+  signal cm_ready   : std_logic := '0';
+
+  signal cm_exp     : command_stream := COMMAND_STREAM_INIT;
 
 begin
 
-  uut: vhsnunzip_decoder
+  uut: vhsnunzip_cmd_gen
     port map (
       clk           => clk,
       reset         => reset,
-      cd            => cd,
-      cd_ready      => cd_ready,
       el            => el,
-      el_ready      => el_ready
+      el_ready      => el_ready,
+      cm            => cm,
+      cm_ready      => cm_ready
     );
 
   clk_proc: process is
@@ -65,10 +65,10 @@ begin
     variable s1   : positive := 1;
     variable s2   : positive := 1;
     variable rnd  : real;
-    variable cd_v : compressed_stream_double;
+    variable el_v : element_stream;
   begin
-    file_open(fil, "cd.tv", read_mode);
-    cd.valid <= '0';
+    file_open(fil, "el.tv", read_mode);
+    el.valid <= '0';
     while not endfile(fil) loop
 
       loop
@@ -78,14 +78,14 @@ begin
       end loop;
 
       readline(fil, lin);
-      stream_des(lin, cd_v, true);
+      stream_des(lin, el_v, true);
 
-      cd <= cd_v;
+      el <= el_v;
       loop
         wait until rising_edge(clk);
-        exit when cd_ready = '1';
+        exit when el_ready = '1';
       end loop;
-      cd.valid <= '0';
+      el.valid <= '0';
 
     end loop;
     file_close(fil);
@@ -98,12 +98,12 @@ begin
     variable s1   : positive := 2;
     variable s2   : positive := 2;
     variable rnd  : real;
-    variable el_v : element_stream;
+    variable cm_v : command_stream;
   begin
     done <= false;
 
-    file_open(fil, "el.tv", read_mode);
-    el_ready <= '0';
+    file_open(fil, "cm.tv", read_mode);
+    cm_ready <= '0';
     while not endfile(fil) loop
 
       loop
@@ -113,36 +113,40 @@ begin
       end loop;
 
       readline(fil, lin);
-      stream_des(lin, el_v, false);
-      el_exp <= el_v;
+      stream_des(lin, cm_v, false);
+      cm_exp <= cm_v;
 
-      el_ready <= '1';
+      cm_ready <= '1';
       loop
         wait until rising_edge(clk);
-        exit when el.valid = '1';
+        exit when cm.valid = '1';
       end loop;
-      el_ready <= '0';
+      cm_ready <= '0';
 
-      assert std_match(el_v.cp_val, el.cp_val) severity failure;
-      assert std_match(el_v.cp_off, el.cp_off) severity failure;
-      assert std_match(el_v.cp_len, el.cp_len) severity failure;
-      assert std_match(el_v.li_val, el.li_val) severity failure;
-      assert std_match(el_v.li_off, el.li_off) severity failure;
-      assert std_match(el_v.li_len, el.li_len) severity failure;
-      assert std_match(el_v.ld_pop, el.ld_pop) severity failure;
-      assert std_match(el_v.last, el.last) severity failure;
+      assert std_match(cm_v.lt_val, cm.lt_val) severity failure;
+      assert std_match(cm_v.lt_adev, cm.lt_adev) severity failure;
+      assert std_match(cm_v.lt_adod, cm.lt_adod) severity failure;
+      assert std_match(cm_v.lt_swap, cm.lt_swap) severity failure;
+      assert std_match(cm_v.st_addr, cm.st_addr) severity failure;
+      assert std_match(cm_v.cp_rol, cm.cp_rol) severity failure;
+      assert std_match(cm_v.cp_rle, cm.cp_rle) severity failure;
+      assert std_match(cm_v.cp_end, cm.cp_end) severity failure;
+      assert std_match(cm_v.li_rol, cm.li_rol) severity failure;
+      assert std_match(cm_v.li_end, cm.li_end) severity failure;
+      assert std_match(cm_v.ld_pop, cm.ld_pop) severity failure;
+      assert std_match(cm_v.last, cm.last) severity failure;
 
     end loop;
     file_close(fil);
 
-    el_ready <= '1';
+    cm_ready <= '1';
     for i in 0 to 100 loop
       wait until rising_edge(clk);
-      exit when el.valid = '1';
+      exit when cm.valid = '1';
     end loop;
-    el_ready <= '0';
+    cm_ready <= '0';
 
-    assert el.valid = '0' report "spurious data!" severity failure;
+    assert cm.valid = '0' report "spurious data!" severity failure;
 
     done <= true;
     wait;

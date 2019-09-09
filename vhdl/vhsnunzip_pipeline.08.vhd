@@ -17,8 +17,8 @@ entity vhsnunzip_pipeline is
     co_level    : out unsigned(5 downto 0);
 
     -- TODO
-    el          : out element_stream;
-    el_ready    : in  std_logic
+    cm          : out command_stream;
+    cm_ready    : in  std_logic
 
   );
 end vhsnunzip_pipeline;
@@ -33,6 +33,9 @@ architecture structure of vhsnunzip_pipeline is
 
   signal cd       : compressed_stream_double;
   signal cd_ready : std_logic;
+
+  signal el       : element_stream;
+  signal el_ready : std_logic;
 
 begin
 
@@ -79,6 +82,16 @@ begin
       cd_ready    => cd_ready,
       el          => el,
       el_ready    => el_ready
+    );
+
+  cmd_gen_inst: vhsnunzip_cmd_gen
+    port map (
+      clk         => clk,
+      reset       => reset,
+      el          => el,
+      el_ready    => el_ready,
+      cm          => cm,
+      cm_ready    => cm_ready
     );
 
 end structure;

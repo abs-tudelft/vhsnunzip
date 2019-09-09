@@ -186,11 +186,11 @@ def cmd_gen(elements):
 
         # cp_src_rel_line = relative; 0 = current line, positive is further
         # forward.
-        st_addr = -1 - cp_src_rel_line
+        st_addr = ~cp_src_rel_line#-1 - cp_src_rel_line
         st_addr &= 31
 
         # lt_addr = absolute; 0 = first line, 1 = second line, etc.
-        lt_val = cp_src_rel_line < -28
+        lt_val = cp_src_rel_line < -31
         lt_addr = lt_cnt + cp_src_rel_line
 
         lt_swap = bool(lt_addr & 1)
@@ -236,12 +236,19 @@ def cmd_gen(elements):
         cp_len -= cp_chunk_len
         budget -= cp_chunk_len
 
+        # Save the offset after the copy so the datapath can derive which
+        # bytes should come from the copy path.
         cp_end = off
 
         # Handle literal data if we're done with the copy.
         if cp_len < 0:
             li_chunk_len = min(li_len + 1, WI*2 - li_off, budget)
         else:
+            li_chunk_len = 0
+
+        # Hardware optimization at the cost of a tiny amount of throughput;
+        # can be disabled.
+        if li_off >= 8:
             li_chunk_len = 0
 
         li_rol = (li_off - off) & (WI*2-1)
@@ -278,10 +285,10 @@ def cmd_gen(elements):
             if last:
                 off = 0
                 lt_cnt = 0
-                el_pend = False
-                cp_len = -1
-                li_len = -1
-                li_off = 0
+                #el_pend = False
+                #cp_len = -1
+                #li_len = -1
+                #li_off = 0
 
         yield CommandStream(
             lt_val, lt_adev, lt_adod, lt_swap,

@@ -147,4 +147,4 @@ begin
     wait;
   end process;
 
-end TestCase;
+end testcase;
