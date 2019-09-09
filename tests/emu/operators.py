@@ -136,87 +136,100 @@ def cmd_gen(elements):
     elements = iter(elements)
 
     off = 0
-    line_count = 0
-    el_valid = False
+    lt_cnt = 0
+    elh_valid = False
 
-    cp_pend = False
+    el_pend = False
+
     cp_len = -1 # diminished-one!
-    cp_off = 0
+    elh_cp_off = 0
 
-    li_pend = False
     li_len = -1 # diminished-one!
     li_off = 0
 
     while True:
 
         # Load next element pair if we need more data.
-        if not el_valid:
-            el = next(elements)
-            el_valid = True
-            cp_pend = el.cp_val
-            li_pend = el.li_val
+        if not elh_valid:
+            elh = next(elements)
+            elh_valid = True
+            el_pend = elh.cp_val or elh.li_val
+            elh_cp_off = elh.cp_off
 
         # If we're out of stuff to do, load the next commands.
-        if cp_len < 0 and li_len < 0:
-            if cp_pend:
-                cp_len = el.cp_len
-                cp_off = el.cp_off
-                cp_pend = False
-            if li_pend:
-                li_len = el.li_len
-                li_off = el.li_off
-                li_pend = False
+        if li_len < 0 and el_pend:
+            if elh.cp_val:
+                cp_len = elh.cp_len
+            if elh.li_val:
+                li_len = elh.li_len
+            li_off = elh.li_off
+            el_pend = False
 
-        # Amount of bytes we can write in this cycle.
-        if el.last:
+        py_start = off
+
+        # Determine the amount of bytes we can write in this cycle. There is
+        # a register in the datapath that allows us to write past the current
+        # line under normal conditions; the extra bytes will be put into the
+        # output holding register in the next cycle. We're still limited to
+        # 8 bytes per cycle this way, but don't have to stall anywhere near as
+        # often. When this is data for the last line though, we shouldn't use
+        # this register.
+        if elh.last:
             budget = WI - off
         else:
             budget = WI
 
-        py_start = off
+        # Compute copy source addresses.
+        cp_src_rel = off - elh_cp_off
+        cp_src_rel_line = cp_src_rel >> WB
+        cp_src_rel_offs = cp_src_rel & (WI-1)
 
-        # Handle copy data.
-        if cp_off == 1:
+        # cp_src_rel_line = relative; 0 = current line, positive is further
+        # forward.
+        st_addr = -1 - cp_src_rel_line
+        st_addr &= 31
+
+        # lt_addr = absolute; 0 = first line, 1 = second line, etc.
+        lt_val = cp_src_rel_line < -28
+        lt_addr = lt_cnt + cp_src_rel_line
+
+        lt_swap = bool(lt_addr & 1)
+        lt_adev = ((lt_addr + 1) >> 1) & (32767 >> WB)
+        lt_adod = (lt_addr >> 1) & (32767 >> WB)
+
+        # Determine how many bytes we can write for the copy element. If there
+        # is no copy element, this becomes 0 automatically
+        cp_chunk_len = min(cp_len + 1, budget)
+
+        if elh_cp_off <= 1:
 
             # Special case for single-byte repetition, since it's relatively
             # common and otherwise has worst-case 1-byte/cycle performance.
             # Requires some extra logic in the address/rotation decoders
             # though; cp_rol becomes an index rather than a rotation when
             # cp_rle is set. Can be disabled by just not taking this branch.
-            cp_chunk_len = min(cp_len + 1, budget)
             cp_rle = True
+            cp_rol = cp_src_rel_offs
 
         else:
-            cp_chunk_len = min(cp_len + 1, cp_off, budget)
+
+            # Without run-length=1 acceleration, we can't copy more bytes at
+            # once than the copy offset, because we'd be reading beyond what
+            # we've written already.
+            if cp_chunk_len > elh_cp_off:
+                cp_chunk_len = elh_cp_off
+
+                # We can however accelerate subsequent copies; after the first
+                # copy we have two consecutive copies in memory, after the
+                # second we have four, and so on. Note that cp_off bit 3 and above
+                # must be zero here, because cp_chunk_len was larger and
+                # cp_chunk_len can be at most 8, so we can ignore them in the
+                # leftshift.
+                assert elh_cp_off < 8
+                elh_cp_off <<= 1
+
             cp_rle = False
-
-        # Compute source offset with respect to the current line.
-        cp_chunk_src_byte = off - cp_off
-        cp_chunk_src_line = cp_chunk_src_byte // WI
-        cp_chunk_src_offs = cp_chunk_src_byte % WI
-
-        # cp_chunk_src_line = relative; 0 = current line, positive is further
-        # forward.
-        st_addr = -1 - cp_chunk_src_line
-        st_addr &= 31
-
-        # lt_addr = absolute; 0 = first line, 1 = second line, etc.
-        lt_val = cp_chunk_src_line < -28
-        lt_addr = line_count + cp_chunk_src_line
-
-        lt_swap = bool(lt_addr & 1)
-        lt_adev = ((lt_addr + 1) >> 1) & (32767 >> WB)
-        lt_adod = (lt_addr >> 1) & (32767 >> WB)
-
-        if cp_rle:
-            cp_rol = cp_chunk_src_offs
-        else:
-            cp_rol = (cp_chunk_src_offs - off) & (WI*2-1)
-
-        # Optimization for run-length encoded lengths: if we're about to write
-        # a complete run, the copy for the next run can be twice as long.
-        if cp_chunk_len == cp_off and cp_off <= WI//2 and not cp_rle:
-            cp_off <<= 1
+            cp_rol = (cp_src_rel_offs - off) & (WI*2-1)
 
         # Update state for copy.
         off += cp_chunk_len
@@ -242,7 +255,7 @@ def cmd_gen(elements):
 
         # Wrap the destination offset. Up to this point we need a bit extra!
         if off >= WI:
-            line_count += 1
+            lt_cnt += 1
         off &= WI - 1
 
         # Determine whether we still need more literal data from this element.
@@ -251,24 +264,22 @@ def cmd_gen(elements):
 
         # If this is the last element input stream entry, don't pop it until
         # we're completely done with it (not just done with decoding it).
-        finishing = el.last and (li_len >= 0 or cp_len >= 0)
+        finishing = elh.last and (li_len >= 0 or cp_len >= 0)
 
         # Invalidate the element record when we have no more need for it, so
         # the next record can be loaded.
         ld_pop = False
         last = False
-        if el_valid and not (cp_pend or li_pend or ld_pend or finishing):
-            el_valid = False
-            ld_pop = el.ld_pop
-            last = el.last
+        if elh_valid and not (cp_len >= 0 or el_pend or ld_pend or finishing):
+            elh_valid = False
+            ld_pop = elh.ld_pop
+            last = elh.last
             li_off -= WI
             if last:
                 off = 0
-                line_count = 0
-                cp_pend = False
+                lt_cnt = 0
+                el_pend = False
                 cp_len = -1
-                cp_off = 0
-                li_pend = False
                 li_len = -1
                 li_off = 0
 
@@ -276,7 +287,7 @@ def cmd_gen(elements):
             lt_val, lt_adev, lt_adod, lt_swap,
             st_addr, cp_rol, cp_rle, cp_end,
             li_rol, li_end, ld_pop, last,
-            el.py_data, py_start)
+            elh.py_data, py_start)
 
 
 class SRL:
