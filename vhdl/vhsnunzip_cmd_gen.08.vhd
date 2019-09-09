@@ -106,18 +106,6 @@ begin
           el_pend := '0';
         end if;
 
-        -- Determine the amount of bytes we can write in this cycle. There is
-        -- a register in the datapath that allows us to write past the current
-        -- line under normal conditions; the extra bytes will be put into the
-        -- output holding register in the next cycle. We're still limited to
-        -- 8 bytes per cycle this way, but don't have to stall anywhere near as
-        -- often. When this is data for the last line though, we shouldn't use
-        -- this register.
-        budget := "1000";
-        if elh.last = '1' then
-          budget := budget - off;
-        end if;
-
         -- Compute copy source addresses. cp_rel(..3) = relative line;
         -- 0 = current line, positive is further forward.
         cp_rel := signed(resize(off, 17)) - signed(resize(elh.cp_off, 17));
@@ -148,10 +136,10 @@ begin
 
         -- Determine how many bytes we can write for the copy element. If there
         -- is no copy element, this becomes 0 automatically.
-        if cp_len < signed(resize(budget, 7)) then
+        if cp_len < 8 then
           len := unsigned(cp_len(3 downto 0)) + 1;
         else
-          len := budget;
+          len := "1000";
         end if;
 
         if elh.cp_off <= 1 then
@@ -188,15 +176,15 @@ begin
 
         -- Update state for copy.
         off := off + len;
+        budget := unsigned(cp_len(3 downto 0)) xor "0111";
         cp_len := cp_len - signed(resize(len, 7));
-        budget := budget - len;
 
         -- Save the offset after the copy so the datapath can derive which
         -- bytes should come from the copy path.
         cmh.cp_end := off;
 
         -- Handle literal data if we're done with the copy.
-        if cp_len < 0 then
+        if cp_len(6) = '1' then
 
           -- Determine how many literal bytes we can write.
           if li_len < signed(resize(budget, 17)) then
@@ -244,27 +232,33 @@ begin
         -- Determine whether we're done with this element information record.
         advance := true;
 
-        -- Don't advance if we still have pending elements (that is, we're
-        -- still writing literals from the previous record).
+        -- Don't advance
+        --  - if we still have pending elements (that is, we're still writing
+        --    literals from the previous record);
+        --  - if we're still copying;
+        --  - when we still need more literal data from this element. This is
+        --    possible if we ran out of write budget for this cycle;
+        --  - if this is the last element input stream entry, and we're not
+        --    completely done yet.
         if el_pend = '1' then
           advance := false;
         end if;
 
         -- Don't advance if we're still copying.
-        if cp_len >= 0 then
+        if cp_len(6) = '0' then
           advance := false;
         end if;
 
         -- Don't advance when we still need more literal data from this
         -- element. This is possible if we ran out of write budget for this
         -- cycle.
-        if li_len >= 0 and li_off < 8 then
+        if li_len(16) = '0' and li_off < 8 then
           advance := false;
         end if;
 
         -- If this is the last element input stream entry, don't advance until
         -- we're completely done with it (not just done with decoding it).
-        if elh.last = '1' and (li_len >= 0 or cp_len >= 0) then
+        if elh.last = '1' and (li_len(16) = '0' or cp_len(6) = '0') then
           advance := false;
         end if;
 

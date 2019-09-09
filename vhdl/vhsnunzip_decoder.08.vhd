@@ -34,6 +34,7 @@ begin
 
     -- Next offset, in case the data we're decoding actually consists of
     -- element headers and not literal data/
+    variable offns  : unsigned(3 downto 0) := (others => '0');
     variable offn   : unsigned(16 downto 0) := (others => '0');
 
     -- Same as `off`, but modulo the line width and converted to integer.
@@ -65,27 +66,27 @@ begin
         ---------------------------------------------------------------------
         -- Handle copy elements
         ---------------------------------------------------------------------
-        offn := resize(off(2 downto 0), 17);
-        ofi := to_integer(offn(2 downto 0));
+        offns := resize(off(2 downto 0), 4);
+        ofi := to_integer(off(2 downto 0));
 
         case cdh.data(ofi)(1 downto 0) is
 
           when "01" =>
             -- 2-byte copy element.
             elh.cp_val := '1';
-            offn := offn + 2;
+            offns := offns + 2;
 
           when "10" =>
             -- 3-byte copy element.
             elh.cp_val := '1';
-            offn := offn + 3;
+            offns := offns + 3;
 
           when "11" =>
             -- 5-byte copy element. Note that we ignore byte 4 and 5; they
             -- should be zero! Otherwise they'd encode an offset beyond
             -- 64kiB, and we can't decompress chunks larger than that.
             elh.cp_val := '1';
-            offn := offn + 5;
+            offns := offns + 5;
 
           when others =>
             -- Literal element.
@@ -108,9 +109,9 @@ begin
         ---------------------------------------------------------------------
         -- Handle literal elements
         ---------------------------------------------------------------------
-        ofi := to_integer(offn(2 downto 0));
+        ofi := to_integer(offns(2 downto 0));
 
-        if offn > cdh.endi then
+        if offns > cdh.endi then
           -- No element (for now); beyond end of stream or starts on the next
           -- line.
           elh.li_val := '0';
@@ -123,16 +124,16 @@ begin
           -- Literal with 2- to 5-byte header. Note that we ignore bytes 4 and 5,
           -- which would only be nonzero for literal lengths over 64kiB.
           elh.li_val := '1';
-          offn := offn + 2 + unsigned(cdh.data(ofi)(3 downto 2));
+          offns := offns + 2 + unsigned(cdh.data(ofi)(3 downto 2));
 
         else
           -- Literal with 1-byte header.
           elh.li_val := '1';
-          offn := offn + 1;
+          offns := offns + 1;
 
         end if;
 
-        elh.li_off := offn(3 downto 0);
+        elh.li_off := offns;
 
         if std_match(cdh.data(ofi), "111100--") then
           -- Literal with 2-byte header, or not a literal.
@@ -149,6 +150,7 @@ begin
         end if;
 
         -- Seek past literal data.
+        offn := resize(offns, 17);
         if elh.li_val = '1' then
           offn := offn + resize(elh.li_len, 17) + 1;
         end if;

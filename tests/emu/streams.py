@@ -161,7 +161,6 @@ class CommandStream(_CommandStream):
         assert is_std_logic(cm.ld_pop)
         assert is_std_logic(cm.last)
         assert cm.ld_pop or not cm.last
-        assert cm.li_end <= WI or not cm.last
         return cm
 
     def serialize(self):

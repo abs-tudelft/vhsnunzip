@@ -167,18 +167,6 @@ def cmd_gen(elements):
 
         py_start = off
 
-        # Determine the amount of bytes we can write in this cycle. There is
-        # a register in the datapath that allows us to write past the current
-        # line under normal conditions; the extra bytes will be put into the
-        # output holding register in the next cycle. We're still limited to
-        # 8 bytes per cycle this way, but don't have to stall anywhere near as
-        # often. When this is data for the last line though, we shouldn't use
-        # this register.
-        if elh.last:
-            budget = WI - off
-        else:
-            budget = WI
-
         # Compute copy source addresses.
         cp_src_rel = off - elh_cp_off
         cp_src_rel_line = cp_src_rel >> WB
@@ -199,7 +187,7 @@ def cmd_gen(elements):
 
         # Determine how many bytes we can write for the copy element. If there
         # is no copy element, this becomes 0 automatically
-        cp_chunk_len = min(cp_len + 1, budget)
+        cp_chunk_len = min(cp_len + 1, WI)
 
         if elh_cp_off <= 1:
 
@@ -231,10 +219,12 @@ def cmd_gen(elements):
             cp_rle = False
             cp_rol = (cp_src_rel_offs - off) & (WI*2-1)
 
+        # Determine how many byte slots are still available for the literal.
+        budget = (cp_len & (WI*2-1)) ^ (WI-1) # = WI - cp_chunk_len when it matters!
+
         # Update state for copy.
         off += cp_chunk_len
         cp_len -= cp_chunk_len
-        budget -= cp_chunk_len
 
         # Save the offset after the copy so the datapath can derive which
         # bytes should come from the copy path.
@@ -514,8 +504,11 @@ def datapath(commands):
                 wr_ptr += 1
 
             # Write to output stream.
-            cnt = cm.li_end if cm.last else WI
-            yield DecompressedStream(data, cm.last, cnt)
+            if cm.last:
+                yield DecompressedStream(data, cm.li_end <= WI, min(WI, cm.li_end))
+            else:
+                #cnt = cm.li_end if cm.last else WI
+                yield DecompressedStream(data, False, WI)
 
             # Invalidate output holding registers.
             for idx in range(WI):
@@ -531,6 +524,11 @@ def datapath(commands):
                 oh_data[idx] = mux_data[idx]
                 oh_valid[idx] = True
                 st[idx].push(mux_data[idx])
+
+        if cm.last and cm.li_end > WI:
+            yield DecompressedStream(tuple(oh_data), True, cm.li_end - WI)
+            for idx in range(WI):
+                oh_valid[idx] = False
 
 
 def verifier(data_stream, expected):
