@@ -162,6 +162,7 @@ class PartialCommandStream(_PartialCommandStream):
         s = []
         s.append(binary(self.cp_off, 16, self.cp_len >= 0))
         s.append(binary(self.cp_len, WB+1))
+        s.append(binary(self.cp_rle, 1, self.cp_len >= 0))
         s.append(binary(self.li_val, 1))
         s.append(binary(self.li_off, WB+1, self.li_val))
         s.append(binary(self.li_len, 16, self.li_val))

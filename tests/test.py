@@ -56,7 +56,7 @@ print('Checking that VHDL and Python streams match...')
 code = vhdeps.run_cli([
     vhdeps_target,
     'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_tc',
-    'vhsnunzip_cmd_gen_tc',
+    'vhsnunzip_cmd_gen_1_tc',
     '-i', '..'] + vhdeps_args)
 if code != 0:
     sys.exit(code)

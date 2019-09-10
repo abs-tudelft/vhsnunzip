@@ -140,7 +140,7 @@ def cmd_gen_1(elements):
 
     elh_valid = False
 
-    cp_len = -1 # diminished-one!
+    cp_rem = -1 # diminished-one!
     elh_cp_off = 0
 
     while True:
@@ -150,7 +150,7 @@ def cmd_gen_1(elements):
             elh = next(elements)
             elh_valid = True
             if elh.cp_val:
-                cp_len = elh.cp_len
+                cp_rem = elh.cp_len
             elh_cp_off = elh.cp_off
 
         # Record the current copy offset for the partial command. We might
@@ -160,7 +160,7 @@ def cmd_gen_1(elements):
 
         # Determine how many bytes we can write for the copy element. If there
         # is no copy element, this becomes 0 automatically
-        cp_chunk_len = min(cp_len + 1, WI)
+        cp_len = min(cp_rem, WI-1)
 
         if elh_cp_off <= 1:
 
@@ -176,33 +176,31 @@ def cmd_gen_1(elements):
             # Without run-length=1 acceleration, we can't copy more bytes at
             # once than the copy offset, because we'd be reading beyond what
             # we've written already.
-            if cp_chunk_len > elh_cp_off:
-                cp_chunk_len = elh_cp_off
+            if cp_len >= elh_cp_off:
+                cp_len = elh_cp_off - 1
+                advance = False
 
                 # We can however accelerate subsequent copies; after the first
                 # copy we have two consecutive copies in memory, after the
                 # second we have four, and so on. Note that cp_off bit 3 and above
-                # must be zero here, because cp_chunk_len was larger and
-                # cp_chunk_len can be at most 8, so we can ignore them in the
+                # must be zero here, because cp_len was larger and
+                # cp_len can be at most 8, so we can ignore them in the
                 # leftshift.
-                assert elh_cp_off < 8
+                assert elh_cp_off < WI
                 elh_cp_off <<= 1
 
             cp_rle = False
 
         # Update state.
-        cp_len -= cp_chunk_len
+        cp_rem -= cp_len + 1
 
         # Advance if there are no (more) bytes in the copy.
-        advance = cp_len < 0
-
-        # Invalidate the element record when we have no more need for it, so
-        # the next record can be loaded.
+        advance = cp_rem < 0
         if elh_valid and advance:
             elh_valid = False
 
         yield PartialCommandStream(
-            cp_off, cp_chunk_len - 1, cp_rle,
+            cp_off, cp_len, cp_rle,
             elh.li_val and advance, elh.li_off, elh.li_len,
             elh.ld_pop and advance, elh.last and advance,
             elh.py_data)

@@ -194,6 +194,72 @@ package vhsnunzip_pkg is
     );
   end component;
 
+  -- Intermediate command stream between the two command generator stages.
+  type partial_command_stream is record
+
+    -- Stream valid signal.
+    valid     : std_logic;
+
+    -- Copy element information. cp_offs is the byte offset and cp_len is the
+    -- length as encoded by the element header. cp_len is stored
+    -- DIMINISHED-ONE, just like the value in the Snappy header (this saves a
+    -- bit).
+    cp_off    : unsigned(15 downto 0);
+    cp_len    : signed(3 downto 0);
+
+    -- Run-length encoding acceleration flag for rotations. When set, the
+    -- constant (0, 1, 2, 3, 4, 5, 6, 7) should be added to cp_rol before the
+    -- main rotation is applied. Carry into bit 3 can be ignored; the high
+    -- line is never actually used in the main rotator because of this number
+    -- and the fact that the decoder only outputs rotations between 0 and 7
+    -- when this is asserted. This all sounds a bit arcane, but what ultimately
+    -- happens because of this is simple: cp_rol is reduced to a byte index
+    -- within the two lines.
+    cp_rle    : std_logic;
+
+    -- Literal element information. li_offs is the starting byte offset within
+    -- li_data for the literal; li_len encodes the literal length. li_len is
+    -- stored DIMINISHED-ONE, just like the value in the Snappy header (this
+    -- saves a bit).
+    li_val    : std_logic;
+    li_off    : unsigned(3 downto 0);
+    li_len    : unsigned(15 downto 0);
+
+    -- Indicates that the literal data FIFO should be popped after this stream
+    -- transfer has been handled.
+    ld_pop    : std_logic;
+
+    -- Indicator for last set of elements/literal data in chunk.
+    last      : std_logic;
+
+  end record;
+
+  procedure stream_des(l: inout line; value: out partial_command_stream; to_x: boolean);
+
+  constant PARTIAL_COMMAND_STREAM_INIT : partial_command_stream := (
+    valid     => '0',
+    cp_off    => (others => UNDEF),
+    cp_len    => (others => UNDEF),
+    cp_rle    => UNDEF,
+    li_val    => UNDEF,
+    li_off    => (others => UNDEF),
+    li_len    => (others => UNDEF),
+    ld_pop    => UNDEF,
+    last      => UNDEF
+  );
+
+  -- Decompression datapath command generator stage 1.
+  component vhsnunzip_cmd_gen_1 is
+    port (
+      clk         : in  std_logic;
+      reset       : in  std_logic;
+      el          : in  element_stream;
+      el_ready    : out std_logic;
+      c1          : out partial_command_stream;
+      c1_ready    : in  std_logic
+    );
+  end component;
+
   -- Command stream for the datapath.
   type command_stream is record
 
@@ -303,7 +369,7 @@ package vhsnunzip_pkg is
     last      => UNDEF
   );
 
-  -- Decompression datapath command generator.
+-- Decompression datapath command generator stage 2.
   component vhsnunzip_cmd_gen is
     port (
       clk         : in  std_logic;
@@ -382,6 +448,29 @@ package body vhsnunzip_pkg is
       value.cp_val := to_x01(value.cp_val);
       value.cp_off := to_x01(value.cp_off);
       value.cp_len := to_x01(value.cp_len);
+      value.li_val := to_x01(value.li_val);
+      value.li_off := to_x01(value.li_off);
+      value.li_len := to_x01(value.li_len);
+      value.ld_pop := to_x01(value.ld_pop);
+      value.last := to_x01(value.last);
+    end if;
+    value.valid := '1';
+  end procedure;
+
+  procedure stream_des(l: inout line; value: out partial_command_stream; to_x: boolean) is
+  begin
+    read(l, value.cp_off);
+    read(l, value.cp_len);
+    read(l, value.cp_rle);
+    read(l, value.li_val);
+    read(l, value.li_off);
+    read(l, value.li_len);
+    read(l, value.ld_pop);
+    read(l, value.last);
+    if to_x then
+      value.cp_off := to_x01(value.cp_off);
+      value.cp_len := to_x01(value.cp_len);
+      value.cp_rle := to_x01(value.cp_rle);
       value.li_val := to_x01(value.li_val);
       value.li_off := to_x01(value.li_off);
       value.li_len := to_x01(value.li_len);
