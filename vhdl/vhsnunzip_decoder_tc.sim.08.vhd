@@ -69,6 +69,10 @@ begin
   begin
     file_open(fil, "cd.tv", read_mode);
     cd.valid <= '0';
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
     while not endfile(fil) loop
 
       loop
@@ -104,6 +108,10 @@ begin
 
     file_open(fil, "el.tv", read_mode);
     el_ready <= '0';
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
     while not endfile(fil) loop
 
       loop

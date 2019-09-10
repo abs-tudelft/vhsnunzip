@@ -69,6 +69,10 @@ begin
   begin
     file_open(fil, "el.tv", read_mode);
     el.valid <= '0';
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
     while not endfile(fil) loop
 
       loop
@@ -100,6 +104,9 @@ begin
     variable rnd  : real;
     variable c1_v : partial_command_stream;
   begin
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
     done <= false;
 
     file_open(fil, "c1.tv", read_mode);

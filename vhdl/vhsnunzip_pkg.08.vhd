@@ -30,7 +30,7 @@ package vhsnunzip_pkg is
     );
   end component;
 
-  -- FIFO component based on vhsnunzip_srl.
+  -- Generic AXI-stream FIFO component based on vhsnunzip_srl.
   component vhsnunzip_fifo is
     generic (
       DATA_WIDTH  : natural := 0;
@@ -42,11 +42,11 @@ package vhsnunzip_pkg is
       reset       : in  std_logic;
       wr_valid    : in  std_logic;
       wr_ready    : out std_logic;
-      wr_data     : in  byte_array(DATA_WIDTH-1 downto 0) := (others => X"00");
+      wr_data     : in  byte_array(0 to 7) := (others => X"00");
       wr_ctrl     : in  std_logic_vector(CTRL_WIDTH-1 downto 0) := (others => '0');
       rd_valid    : out std_logic;
       rd_ready    : in  std_logic;
-      rd_data     : out byte_array(DATA_WIDTH-1 downto 0);
+      rd_data     : out byte_array(0 to 7);
       rd_ctrl     : out std_logic_vector(CTRL_WIDTH-1 downto 0);
       level       : out unsigned(DEPTH_LOG2 downto 0);
       empty       : out std_logic;
@@ -383,6 +383,56 @@ package vhsnunzip_pkg is
     );
   end component;
 
+  -- Decompression output stream payload.
+  type decompressed_stream is record
+
+    -- Stream valid signal.
+    valid     : std_logic;
+
+    -- Decompressed data line.
+    data      : byte_array(0 to 7);
+
+    -- Asserted to mark the last line of a chunk.
+    last      : std_logic;
+
+    -- Indicates the number of valid bytes. This is always 8 when last is not
+    -- set, but could be anything from 0 to 8 inclusive for the last transfer.
+    cnt       : unsigned(3 downto 0);
+
+  end record;
+
+  constant DECOMPRESSED_STREAM_INIT : decompressed_stream := (
+    valid     => '0',
+    data      => (others => (others => UNDEF)),
+    last      => UNDEF,
+    cnt       => (others => UNDEF)
+  );
+
+  procedure stream_des(l: inout line; value: out decompressed_stream; to_x: boolean);
+
+  -- Snappy decompression pipeline.
+  component vhsnunzip_pipeline is
+    port (
+      clk         : in  std_logic;
+      reset       : in  std_logic;
+      co          : in  compressed_stream_single;
+      co_ready    : out std_logic;
+      co_level    : out unsigned(5 downto 0);
+      lt_off_ld   : in  std_logic := '1';
+      lt_off      : in  unsigned(12 downto 0) := (others => '0');
+      lt_rd_valid : out std_logic;
+      lt_rd_ready : in  std_logic;
+      lt_rd_adev  : out unsigned(11 downto 0);
+      lt_rd_adod  : out unsigned(11 downto 0);
+      lt_rd_next  : in  std_logic;
+      lt_rd_even  : in  byte_array(0 to 7);
+      lt_rd_odd   : in  byte_array(0 to 7);
+      de          : out decompressed_stream;
+      de_ready    : in  std_logic;
+      de_level    : out unsigned(5 downto 0)
+    );
+  end component;
+
 end package vhsnunzip_pkg;
 
 package body vhsnunzip_pkg is
@@ -507,6 +557,23 @@ package body vhsnunzip_pkg is
       value.li_end := to_x01(value.li_end);
       value.ld_pop := to_x01(value.ld_pop);
       value.last := to_x01(value.last);
+    end if;
+    value.valid := '1';
+  end procedure;
+
+  procedure stream_des(l: inout line; value: out decompressed_stream; to_x: boolean) is
+  begin
+    for i in value.data'range loop
+      read(l, value.data(i));
+      if to_x then
+        value.data(i) := to_x01(value.data(i));
+      end if;
+    end loop;
+    read(l, value.last);
+    read(l, value.cnt);
+    if to_x then
+      value.last := to_x01(value.last);
+      value.cnt := to_x01(value.cnt);
     end if;
     value.valid := '1';
   end procedure;

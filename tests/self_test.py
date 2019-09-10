@@ -64,11 +64,22 @@ while True:
             self.count += 1
             return ret
 
+    class PopCounter(Counter):
+        def __init__(self, generator):
+            super().__init__(generator)
+            self.pop_count = 0
+
+        def __next__ (self):
+            ret = super().__next__()
+            if ret.ld_pop:
+                self.pop_count += 1
+            return ret
+
     cs = Counter(data_source(compressed))
     cd = Counter(pre_decoder(cs))
-    el = Counter(decoder(cd))
-    c1 = Counter(cmd_gen_1(el))
-    cm = Counter(cmd_gen_2(c1))
+    el = PopCounter(decoder(cd))
+    c1 = PopCounter(cmd_gen_1(el))
+    cm = PopCounter(cmd_gen_2(c1))
     de = Counter(datapath(cm))
 
     for _ in verifier(de, uncompressed):
@@ -76,11 +87,16 @@ while True:
 
     print('uncompressed size=%d, compressed size=%d, chunk count=%d' % (
         len(data), sum(map(len, compressed)), len(compressed)))
-    print('stream transfer counts: cs=%d, cd=%d, el=%d, cm=%d, de=%d' % (
-        cs.count, cd.count, el.count, cm.count, de.count))
+    print('stream transfer counts: cs=%d, cd=%d, el=%d, c1=%d, cm=%d, de=%d' % (
+        cs.count, cd.count, el.count, c1.count, cm.count, de.count))
+    print('literal pop counts: el=%d, c1=%d, cm=%d' % (
+        el.pop_count, c1.pop_count, cm.pop_count))
     print('approx. bytes/cycle: %.3f' % (
         len(data) / cm.count))
 
+    assert cs.count == el.pop_count
+    assert cs.count == c1.pop_count
+    assert cs.count == cm.pop_count
 
     seed += 1
 

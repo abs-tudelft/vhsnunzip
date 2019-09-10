@@ -73,8 +73,17 @@ begin
     -- Output holding register.
     variable cmh    : command_stream := COMMAND_STREAM_INIT;
 
+    -- Stall signal to insert at least one delay cycle after the last transfer
+    -- for a chunk.
+    variable stall  : std_logic;
+
   begin
     if rising_edge(clk) then
+
+      -- If we just shifted out the last transfer, block for one cycle. This
+      -- cycle is potentially needed in the datapath, for it to push out the
+      -- contents of its holding register.
+      stall := cmh.valid and cm_ready and cmh.last;
 
       -- Invalidate the output register if it was shifted out.
       if cm_ready = '1' then
@@ -90,7 +99,7 @@ begin
       end if;
 
       -- Decode when we have valid data and have room for the result.
-      if c1h.valid = '1' and cmh.valid = '0' then
+      if c1h.valid = '1' and cmh.valid = '0' and stall = '0' then
         cmh.valid := '1';
 
         -- If we're out of stuff to do, load the next commands.

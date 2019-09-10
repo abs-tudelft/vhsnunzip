@@ -364,9 +364,9 @@ def datapath(commands):
     # the generators.
 
     # Source selection for the copy pre-mux per byte:
-    #  - 0: short-term
-    #  - 1: long-term even
-    #  - 2: long-term odd
+    #  - 0 or 1: short-term
+    #  - 2: long-term even
+    #  - 3: long-term odd
     cp_sel = [0] * WI
 
     # Data after the source selector.
@@ -395,23 +395,26 @@ def datapath(commands):
     for cm in commands:
 
         # Decode the mux control signals.
-        for idx in range(WI):
+        for byte in range(WI):
 
             # Determine if this byte is a copied or a literal byte.
-            if idx < cm.cp_end - WI:
+            if byte < cm.cp_end - WI:
                 mux = 1
-            elif idx < cm.li_end - WI:
+            elif byte < cm.li_end - WI:
                 mux = 0
-            elif idx < cm.cp_end:
+            elif byte < cm.cp_end:
                 mux = 1
-            elif idx < cm.li_end:
+            else:
                 mux = 0
 
             # Determine the copy rotation.
             if cm.cp_rle:
-                cp_rol = (cm.cp_rol - idx) & (WI*2-1)
+                cp_rol = (cm.cp_rol - byte) & (WI*2-1)
             else:
                 cp_rol = cm.cp_rol
+
+            # Determine the rotation for the final rotator mux.
+            rol = cp_rol if mux else cm.li_rol
 
             # We're trying to do a WI*2-wide rotation with a WI-wide rotator by
             # exploiting the fact that:
@@ -454,54 +457,47 @@ def datapath(commands):
 
             # Determine if we want to select from the addressed line or the
             # subsequent line.
-            cpl = ((idx - cm.cp_rol - prec) & (WI*2-1)) >= WI
-            lil = ((idx - cm.li_rol - prec) & (WI*2-1)) >= WI
-            #if idx + WI < cm.li_end:
-                ## toggle index idx - cp_rol
+            cpl = ((byte - cm.cp_rol - prec) & (WI*2-1)) >= WI
+            lil = ((byte - cm.li_rol - prec) & (WI*2-1)) >= WI
+            #if byte + WI < cm.li_end:
+                ## toggle index byte - cp_rol
                 #cpl = not cpl
                 #lil = not lil
             if cm.cp_rle:
                 cpl = False
 
             # Determine the copy source:
-            #  - 0 = short-term
-            #  - 1 = long-term even
-            #  - 2 = long-term odd
-            if not cm.lt_val:
-                cps = 0
-            elif not (cpl ^ cm.lt_swap):
-                cps = 1
-            else:
-                cps = 2
+            #  - 0 or 1 = short-term
+            #  - 2 = long-term even
+            #  - 3 = long-term odd
+            cps = 2 * bool(cm.lt_val)
+            cps += bool(cpl ^ cm.lt_swap)
 
-            # Determine the rotation for the final rotator mux.
-            rol = cp_rol if mux else cm.li_rol
-
-            cp_sel[idx] = cps
-            rol_sel[idx] = rol
-            mux_sel[idx] = mux
-            li_la[idx] = lil
-            st_la[idx] = cpl
+            cp_sel[byte] = cps
+            rol_sel[byte] = rol
+            mux_sel[byte] = mux
+            li_la[byte] = lil
+            st_la[byte] = cpl
 
         # Load the data sources available to the datapath.
-        li_data = tuple((cm.py_data[idx + WI*li_la[idx]] for idx in range(WI)))
-        st_data = tuple((st[idx][cm.st_addr - st_la[idx] + oh_valid[idx]] for idx in range(WI)))
+        li_data = tuple((cm.py_data[byte + WI*li_la[byte]] for byte in range(WI)))
+        st_data = tuple((st[byte][cm.st_addr - st_la[byte] + oh_valid[byte]] for byte in range(WI)))
         le_data = lt[cm.lt_adev * 2]
         lo_data = lt[cm.lt_adod * 2 + 1]
 
         # Generate the copy source multiplexer.
-        for idx in range(WI):
-            if cp_sel[idx] == 0:
-                cp_data[idx] = st_data[idx]
-            elif cp_sel[idx] == 1:
-                cp_data[idx] = le_data[idx]
+        for byte in range(WI):
+            if cp_sel[byte] == 2:
+                cp_data[byte] = le_data[byte]
+            elif cp_sel[byte] == 3:
+                cp_data[byte] = lo_data[byte]
             else:
-                cp_data[idx] = lo_data[idx]
+                cp_data[byte] = st_data[byte]
 
         # Generate the rotator and output mux.
-        for idx in range(WI):
-            src_data = cp_data if mux_sel[idx] else li_data
-            mux_data[idx] = src_data[(rol_sel[idx] + idx) & (WI-1)]
+        for byte in range(WI):
+            src_data = cp_data if mux_sel[byte] else li_data
+            mux_data[byte] = src_data[(rol_sel[byte] + byte) & (WI-1)]
 
         #if cm.lt_val:
             #print(cm)
@@ -511,13 +507,13 @@ def datapath(commands):
             #print('select  |%s|' % ''.join(map(str, cp_sel)))
             #print('        |%s|' % ('-'*WI))
             #print('muxed   |%s|' % safe_chr(cp_data, oneline=True))
-            #print('rol amt |%s|' % ''.join(map(str, [rol_sel[idx] & (WI-1) for idx in range(WI)])))
-            #print('index   |%s|' % ''.join(map(str, [(rol_sel[idx] + idx) & (WI-1) for idx in range(WI)])))
+            #print('rol amt |%s|' % ''.join(map(str, [rol_sel[byte] & (WI-1) for byte in range(WI)])))
+            #print('index   |%s|' % ''.join(map(str, [(rol_sel[byte] + byte) & (WI-1) for byte in range(WI)])))
             #print('        |%s|' % ''.join(map(lambda x: 'v' if x else ' ', mux_sel)))
             #print('mux out |%s|' % safe_chr(mux_data, oneline=True))
             #print('        |%s|' % ''.join(map(lambda x: ' ' if x else '^', mux_sel)))
-            #print('index   |%s|' % ''.join(map(str, [(rol_sel[idx] + idx) & (WI-1) for idx in range(WI)])))
-            #print('rol amt |%s|' % ''.join(map(str, [rol_sel[idx] & (WI-1) for idx in range(WI)])))
+            #print('index   |%s|' % ''.join(map(str, [(rol_sel[byte] + byte) & (WI-1) for byte in range(WI)])))
+            #print('rol amt |%s|' % ''.join(map(str, [rol_sel[byte] & (WI-1) for byte in range(WI)])))
             #print('lookahd |%s|' % ''.join(map(str, map(int, li_la))))
             #print('literal |%s|' % safe_chr(li_data, oneline=True))
 
@@ -527,11 +523,11 @@ def datapath(commands):
         #print('oh_valid|%s|' % ''.join(map(str, map(int, oh_valid))))
 
         # Update the holding register and short-term memory.
-        for idx in range(WI):
-            if not oh_valid[idx] and idx < cm.li_end:
-                oh_data[idx] = mux_data[idx]
-                oh_valid[idx] = True
-                st[idx].push(mux_data[idx])
+        for byte in range(WI):
+            if not oh_valid[byte] and byte < cm.li_end:
+                oh_data[byte] = mux_data[byte]
+                oh_valid[byte] = True
+                st[byte].push(mux_data[byte])
 
         #print('oh_data |%s|' % safe_chr(oh_data, oneline=True))
         #print('oh_valid|%s|' % ''.join(map(str, map(int, oh_valid))))
@@ -553,24 +549,24 @@ def datapath(commands):
                 yield DecompressedStream(data, False, WI)
 
             # Invalidate output holding registers.
-            for idx in range(WI):
-                oh_valid[idx] = False
+            for byte in range(WI):
+                oh_valid[byte] = False
 
             # Reset state if this was the last line.
             if cm.last:
                 wr_ptr = 0
 
         # Update the holding register and short-term memory for the next cycle.
-        for idx in range(WI-1):
-            if (idx + WI) < cm.li_end:
-                oh_data[idx] = mux_data[idx]
-                oh_valid[idx] = True
-                st[idx].push(mux_data[idx])
+        for byte in range(WI-1):
+            if (byte + WI) < cm.li_end:
+                oh_data[byte] = mux_data[byte]
+                oh_valid[byte] = True
+                st[byte].push(mux_data[byte])
 
         if cm.last and cm.li_end > WI:
             yield DecompressedStream(tuple(oh_data), True, cm.li_end - WI)
-            for idx in range(WI):
-                oh_valid[idx] = False
+            for byte in range(WI):
+                oh_valid[byte] = False
 
 
 def verifier(data_stream, expected):

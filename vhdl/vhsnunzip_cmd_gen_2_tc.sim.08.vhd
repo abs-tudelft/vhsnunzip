@@ -69,6 +69,10 @@ begin
   begin
     file_open(fil, "c1.tv", read_mode);
     c1.valid <= '0';
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
     while not endfile(fil) loop
 
       loop
@@ -104,6 +108,10 @@ begin
 
     file_open(fil, "cm.tv", read_mode);
     cm_ready <= '0';
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
     while not endfile(fil) loop
 
       loop
