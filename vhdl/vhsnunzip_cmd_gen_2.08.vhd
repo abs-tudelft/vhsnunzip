@@ -5,15 +5,15 @@ use ieee.numeric_std.all;
 library work;
 use work.vhsnunzip_pkg.all;
 
--- Decompression datapath command generator.
-entity vhsnunzip_cmd_gen is
+-- Decompression datapath command generator stage 2.
+entity vhsnunzip_cmd_gen_2 is
   port (
     clk         : in  std_logic;
     reset       : in  std_logic;
 
-    -- Element information input stream.
-    el          : in  element_stream;
-    el_ready    : out std_logic;
+    -- Preprocessed command input stream.
+    c1          : in  partial_command_stream;
+    c1_ready    : out std_logic;
 
     -- Long-term storage first line offset. Must be loaded by strobing ld
     -- for each chunk before chunk processing will start. Alternatively, in
@@ -26,14 +26,14 @@ entity vhsnunzip_cmd_gen is
     cm_ready    : in  std_logic
 
   );
-end vhsnunzip_cmd_gen;
+end vhsnunzip_cmd_gen_2;
 
-architecture behavior of vhsnunzip_cmd_gen is
+architecture behavior of vhsnunzip_cmd_gen_2 is
 begin
   proc: process (clk) is
 
     -- Input holding register.
-    variable elh    : element_stream := ELEMENT_STREAM_INIT;
+    variable c1h    : partial_command_stream := PARTIAL_COMMAND_STREAM_INIT;
 
     -- Virtual long-term memory line write pointer. Used to compute the read
     -- pointers from the relative offsets in the copy elements. lt_val stores
@@ -41,13 +41,12 @@ begin
     variable lt_val : std_logic;
     variable lt_ptr : unsigned(12 downto 0);
 
-    -- Elements are available in elh that we can't load yet because we're still
+    -- Elements are available in c1h that we can't load yet because we're still
     -- busy with a literal from the previous element transfer.
-    variable el_pend: std_logic;
+    variable c1_pend: std_logic;
 
-    -- Remaining copy length, diminished-one. The sign bit is an inverted
-    -- validity bit.
-    variable cp_len : signed(6 downto 0) := (others => '1');
+    -- Preprocessed copy length. The sign bit is an inverted validity bit.
+    variable cp_len : signed(3 downto 0) := (others => '1');
 
     -- Temporary variables used during decoding.
     variable cp_rel : signed(16 downto 0);
@@ -83,32 +82,30 @@ begin
       end if;
 
       -- Shift new data into the input when we can.
-      if elh.valid = '0' and lt_val = '1' then
-        elh := el;
-        if elh.valid = '1' then
-          el_pend := elh.cp_val or elh.li_val;
+      if c1h.valid = '0' and lt_val = '1' then
+        c1h := c1;
+        if c1h.valid = '1' then
+          c1_pend := not c1h.cp_len(3) or c1h.li_val;
         end if;
       end if;
 
       -- Decode when we have valid data and have room for the result.
-      if elh.valid = '1' and cmh.valid = '0' then
+      if c1h.valid = '1' and cmh.valid = '0' then
         cmh.valid := '1';
 
         -- If we're out of stuff to do, load the next commands.
-        if li_len < 0 and el_pend = '1' then
-          if elh.cp_val = '1' then
-            cp_len := signed(resize(elh.cp_len, 7));
+        if li_len(16) = '1' and c1_pend = '1' then
+          cp_len := c1h.cp_len;
+          if c1h.li_val = '1' then
+            li_len := signed(resize(c1h.li_len, 17));
           end if;
-          if elh.li_val = '1' then
-            li_len := signed(resize(elh.li_len, 17));
-          end if;
-          li_off := elh.li_off;
-          el_pend := '0';
+          li_off := c1h.li_off;
+          c1_pend := '0';
         end if;
 
         -- Compute copy source addresses. cp_rel(..3) = relative line;
         -- 0 = current line, positive is further forward.
-        cp_rel := signed(resize(off, 17)) - signed(resize(elh.cp_off, 17));
+        cp_rel := signed(resize(off, 17)) - signed(resize(c1h.cp_off, 17));
 
         -- Compute short-term address. This coincidentally works out to a
         -- carry-free operation!
@@ -134,79 +131,45 @@ begin
           cmh.lt_val := '0';
         end if;
 
-        -- Determine how many bytes we can write for the copy element. If there
-        -- is no copy element, this becomes 0 automatically.
-        if cp_len < 8 then
-          len := unsigned(cp_len(3 downto 0)) + 1;
-        else
-          len := "1000";
-        end if;
-
-        if elh.cp_off <= 1 then
-
-          -- Special case for single-byte repetition, since it's relatively
-          -- common and otherwise has worst-case 1-byte/cycle performance.
-          -- Requires some extra logic in the address/rotation decoders
-          -- though; cp_rol becomes an index rather than a rotation when
-          -- cp_rle is set. Can be disabled by just not taking this branch.
-          cmh.cp_rle := '1';
+        -- Determine the rotation/byte mux selection.
+        cmh.cp_rle := c1h.cp_rle;
+        if c1h.cp_rle = '1' then
           cmh.cp_rol := "0" & unsigned(cp_rel(2 downto 0));
-
         else
-
-          -- Without run-length=1 acceleration, we can't copy more bytes at
-          -- once than the copy offset, because we'd be reading beyond what
-          -- we've written already.
-          if len > elh.cp_off then
-            len := elh.cp_off(3 downto 0);
-
-            -- We can however accelerate subsequent copies; after the first
-            -- copy we have two consecutive copies in memory, after the
-            -- second we have four, and so on. Note that cp_off bit 3 and above
-            -- must be zero here, because len was larger and len can be at most
-            -- 8, so we can ignore them in the leftshift.
-            elh.cp_off(3 downto 0) := elh.cp_off(2 downto 0) & "0";
-
-          end if;
-
-          cmh.cp_rle := '0';
           cmh.cp_rol := unsigned(cp_rel(2 downto 0)) - off;
-
         end if;
+
+        -- Determine how many byte slots are still available for the literal.
+        budget := unsigned(cp_len(3 downto 0)) xor "0111";
 
         -- Update state for copy.
-        off := off + len;
-        budget := unsigned(cp_len(3 downto 0)) xor "0111";
-        cp_len := cp_len - signed(resize(len, 7));
+        off := off + unsigned(cp_len) + 1;
+
+        -- Thanks to the preprocessing in stage 1, each copy command can be
+        -- handled in a single cycle, so we're done with it now.
+        cp_len := (others => '1');
 
         -- Save the offset after the copy so the datapath can derive which
         -- bytes should come from the copy path.
         cmh.cp_end := off;
 
-        -- Handle literal data if we're done with the copy.
-        if cp_len(6) = '1' then
-
-          -- Determine how many literal bytes we can write.
-          if li_len < signed(resize(budget, 17)) then
-            len := unsigned(li_len(3 downto 0)) + 1;
-          else
-            len := budget;
-          end if;
-
-          -- The literal element header could start at byte 7 of the incoming
-          -- data line, which means that the literal data might start as far
-          -- forward as byte index 10. In this case, we can't write the full
-          -- 8 bytes, because the indexation into the lookahead line would
-          -- overflow. There are two ways to deal with this; either we limit
-          -- len such that it doesn't overflow, or we just don't write any
-          -- chunk in this case and wait until the next cycle, when we'll have
-          -- advanced a line. The latter costs only a *tiny* bit of throughput
-          -- while the latter requires a bit more logic.
-          if li_off(3) = '1' then
-            len := "0000";
-          end if;
-
+        -- Determine how many literal bytes we can write.
+        if li_len < signed(resize(budget, 17)) then
+          len := unsigned(li_len(3 downto 0)) + 1;
         else
+          len := budget;
+        end if;
+
+        -- The literal element header could start at byte 7 of the incoming
+        -- data line, which means that the literal data might start as far
+        -- forward as byte index 10. In this case, we can't write the full
+        -- 8 bytes, because the indexation into the lookahead line would
+        -- overflow. There are two ways to deal with this; either we limit
+        -- len such that it doesn't overflow, or we just don't write any
+        -- chunk in this case and wait until the next cycle, when we'll have
+        -- advanced a line. The latter costs only a *tiny* bit of throughput
+        -- while the latter requires a bit more logic.
+        if li_off(3) = '1' then
           len := "0000";
         end if;
 
@@ -240,12 +203,7 @@ begin
         --    possible if we ran out of write budget for this cycle;
         --  - if this is the last element input stream entry, and we're not
         --    completely done yet.
-        if el_pend = '1' then
-          advance := false;
-        end if;
-
-        -- Don't advance if we're still copying.
-        if cp_len(6) = '0' then
+        if c1_pend = '1' then
           advance := false;
         end if;
 
@@ -258,18 +216,18 @@ begin
 
         -- If this is the last element input stream entry, don't advance until
         -- we're completely done with it (not just done with decoding it).
-        if elh.last = '1' and (li_len(16) = '0' or cp_len(6) = '0') then
+        if c1h.last = '1' and li_len(16) = '0' then
           advance := false;
         end if;
 
         -- Invalidate the element record when we have no more need for it, so
         -- the next record can be loaded.
         if advance then
-          elh.valid := '0';
-          cmh.ld_pop := elh.ld_pop;
-          cmh.last := elh.last;
+          c1h.valid := '0';
+          cmh.ld_pop := c1h.ld_pop;
+          cmh.last := c1h.last;
           li_off := li_off - 8;
-          if elh.last = '1' then
+          if c1h.last = '1' then
             lt_val := '0';
             off := (others => '0');
           end if;
@@ -288,17 +246,17 @@ begin
 
       -- Handle reset.
       if reset = '1' then
-        elh.valid := '0';
+        c1h.valid := '0';
         cmh.valid := '0';
         lt_val := '0';
-        el_pend := '0';
+        c1_pend := '0';
         cp_len := (others => '1');
         li_len := (others => '1');
         off := (others => '0');
       end if;
 
       -- Assign outputs.
-      el_ready <= lt_val and not elh.valid;
+      c1_ready <= lt_val and not c1h.valid;
       cm <= cmh;
 
     end if;

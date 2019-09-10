@@ -16,6 +16,12 @@ entity vhsnunzip_pipeline is
     co_ready    : out std_logic;
     co_level    : out unsigned(5 downto 0);
 
+    -- Long-term storage first line offset. Must be loaded by strobing ld
+    -- for each chunk before chunk processing will start. Alternatively, in
+    -- streaming mode with circular history, this can be left unconnected.
+    lt_off_ld   : in  std_logic := '1';
+    lt_off      : in  unsigned(12 downto 0) := (others => '0');
+
     -- TODO
     cm          : out command_stream;
     cm_ready    : in  std_logic
@@ -36,6 +42,9 @@ architecture structure of vhsnunzip_pipeline is
 
   signal el       : element_stream;
   signal el_ready : std_logic;
+
+  signal c1       : partial_command_stream;
+  signal c1_ready : std_logic;
 
 begin
 
@@ -84,12 +93,24 @@ begin
       el_ready    => el_ready
     );
 
-  cmd_gen_inst: vhsnunzip_cmd_gen
+  cmd_gen_1_inst: vhsnunzip_cmd_gen_1
     port map (
       clk         => clk,
       reset       => reset,
       el          => el,
       el_ready    => el_ready,
+      c1          => c1,
+      c1_ready    => c1_ready
+    );
+
+  cmd_gen_2_inst: vhsnunzip_cmd_gen_2
+    port map (
+      clk         => clk,
+      reset       => reset,
+      c1          => c1,
+      c1_ready    => c1_ready,
+      lt_off_ld   => lt_off_ld,
+      lt_off      => lt_off,
       cm          => cm,
       cm_ready    => cm_ready
     );

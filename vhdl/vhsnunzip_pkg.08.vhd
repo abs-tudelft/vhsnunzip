@@ -369,13 +369,13 @@ package vhsnunzip_pkg is
     last      => UNDEF
   );
 
--- Decompression datapath command generator stage 2.
-  component vhsnunzip_cmd_gen is
+  -- Decompression datapath command generator stage 2.
+  component vhsnunzip_cmd_gen_2 is
     port (
       clk         : in  std_logic;
       reset       : in  std_logic;
-      el          : in  element_stream;
-      el_ready    : out std_logic;
+      c1          : in  partial_command_stream;
+      c1_ready    : out std_logic;
       lt_off_ld   : in  std_logic := '1';
       lt_off      : in  unsigned(12 downto 0) := (others => '0');
       cm          : out command_stream;

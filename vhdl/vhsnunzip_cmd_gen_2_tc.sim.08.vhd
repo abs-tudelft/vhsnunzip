@@ -9,17 +9,17 @@ use ieee.math_real.all;
 library work;
 use work.vhsnunzip_pkg.all;
 
-entity vhsnunzip_cmd_gen_tc is
-end vhsnunzip_cmd_gen_tc;
+entity vhsnunzip_cmd_gen_2_tc is
+end vhsnunzip_cmd_gen_2_tc;
 
-architecture testcase of vhsnunzip_cmd_gen_tc is
+architecture testcase of vhsnunzip_cmd_gen_2_tc is
 
   signal clk        : std_logic := '0';
   signal reset      : std_logic := '1';
   signal done       : boolean := false;
 
-  signal el         : element_stream := ELEMENT_STREAM_INIT;
-  signal el_ready   : std_logic := '0';
+  signal c1         : partial_command_stream := PARTIAL_COMMAND_STREAM_INIT;
+  signal c1_ready   : std_logic := '0';
 
   signal cm         : command_stream := COMMAND_STREAM_INIT;
   signal cm_ready   : std_logic := '0';
@@ -28,12 +28,12 @@ architecture testcase of vhsnunzip_cmd_gen_tc is
 
 begin
 
-  uut: vhsnunzip_cmd_gen
+  uut: vhsnunzip_cmd_gen_2
     port map (
       clk           => clk,
       reset         => reset,
-      el            => el,
-      el_ready      => el_ready,
+      c1            => c1,
+      c1_ready      => c1_ready,
       cm            => cm,
       cm_ready      => cm_ready
     );
@@ -65,10 +65,10 @@ begin
     variable s1   : positive := 1;
     variable s2   : positive := 1;
     variable rnd  : real;
-    variable el_v : element_stream;
+    variable c1_v : partial_command_stream;
   begin
-    file_open(fil, "el.tv", read_mode);
-    el.valid <= '0';
+    file_open(fil, "c1.tv", read_mode);
+    c1.valid <= '0';
     while not endfile(fil) loop
 
       loop
@@ -78,14 +78,14 @@ begin
       end loop;
 
       readline(fil, lin);
-      stream_des(lin, el_v, true);
+      stream_des(lin, c1_v, true);
 
-      el <= el_v;
+      c1 <= c1_v;
       loop
         wait until rising_edge(clk);
-        exit when el_ready = '1';
+        exit when c1_ready = '1';
       end loop;
-      el.valid <= '0';
+      c1.valid <= '0';
 
     end loop;
     file_close(fil);
