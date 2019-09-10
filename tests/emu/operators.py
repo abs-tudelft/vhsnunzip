@@ -130,22 +130,18 @@ def decoder(cd):
             last, data)
 
 
-def cmd_gen(elements):
-    """Emulates the datapath command generator block."""
+def cmd_gen_1(elements):
+    """Emulates stage 1 of the datapath command generator block. This stage
+    preprocesses the copy elements into chunks such that the chunk length is
+    limited to WB and cp_off, unless cp_off == 1 and run-length acceleration
+    applies."""
 
     elements = iter(elements)
 
-    off = 0
-    lt_cnt = 0
     elh_valid = False
-
-    el_pend = False
 
     cp_len = -1 # diminished-one!
     elh_cp_off = 0
-
-    li_len = -1 # diminished-one!
-    li_off = 0
 
     while True:
 
@@ -153,37 +149,14 @@ def cmd_gen(elements):
         if not elh_valid:
             elh = next(elements)
             elh_valid = True
-            el_pend = elh.cp_val or elh.li_val
-            elh_cp_off = elh.cp_off
-
-        # If we're out of stuff to do, load the next commands.
-        if li_len < 0 and el_pend:
             if elh.cp_val:
                 cp_len = elh.cp_len
-            if elh.li_val:
-                li_len = elh.li_len
-            li_off = elh.li_off
-            el_pend = False
+            elh_cp_off = elh.cp_off
 
-        py_start = off
-
-        # Compute copy source addresses.
-        cp_src_rel = off - elh_cp_off
-        cp_src_rel_line = cp_src_rel >> WB
-        cp_src_rel_offs = cp_src_rel & (WI-1)
-
-        # cp_src_rel_line = relative; 0 = current line, positive is further
-        # forward.
-        st_addr = ~cp_src_rel_line#-1 - cp_src_rel_line
-        st_addr &= 31
-
-        # lt_addr = absolute; 0 = first line, 1 = second line, etc.
-        lt_val = cp_src_rel_line < -31
-        lt_addr = lt_cnt + cp_src_rel_line
-
-        lt_swap = bool(lt_addr & 1)
-        lt_adev = ((lt_addr + 1) >> 1) & (32767 >> WB)
-        lt_adod = (lt_addr >> 1) & (32767 >> WB)
+        # Record the current copy offset for the partial command. We might
+        # change it to increase the amount of bytes we can copy per cycle in
+        # a run-length-encoded copy.
+        cp_off = elh_cp_off
 
         # Determine how many bytes we can write for the copy element. If there
         # is no copy element, this becomes 0 automatically
@@ -197,7 +170,6 @@ def cmd_gen(elements):
             # though; cp_rol becomes an index rather than a rotation when
             # cp_rle is set. Can be disabled by just not taking this branch.
             cp_rle = True
-            cp_rol = cp_src_rel_offs
 
         else:
 
@@ -217,24 +189,100 @@ def cmd_gen(elements):
                 elh_cp_off <<= 1
 
             cp_rle = False
-            cp_rol = (cp_src_rel_offs - off) & (WI*2-1)
+
+        # Update state.
+        cp_len -= cp_chunk_len
+
+        # Advance if there are no (more) bytes in the copy.
+        advance = cp_len < 0
+
+        # Invalidate the element record when we have no more need for it, so
+        # the next record can be loaded.
+        if elh_valid and advance:
+            elh_valid = False
+
+        yield PartialCommandStream(
+            cp_off, cp_chunk_len - 1, cp_rle,
+            elh.li_val and advance, elh.li_off, elh.li_len,
+            elh.ld_pop and advance, elh.last and advance,
+            elh.py_data)
+
+
+def cmd_gen_2(partial_commands):
+    """Emulates stage 2 of the datapath command generator block. This does
+    whatever stage 1 doesn't."""
+
+    partial_commands = iter(partial_commands)
+
+    off = 0
+    lt_cnt = 0
+    c1h_valid = False
+
+    c1_pend = False
+
+    cp_len = -1 # diminished-one!
+
+    li_len = -1 # diminished-one!
+    li_off = 0
+
+    while True:
+
+        # Load next element pair if we need more data.
+        if not c1h_valid:
+            c1h = next(partial_commands)
+            c1h_valid = True
+            c1_pend = c1h.cp_len >= 0 or c1h.li_val
+
+        # If we're out of stuff to do, load the next commands.
+        if li_len < 0 and c1_pend:
+            cp_len = c1h.cp_len
+            if c1h.li_val:
+                li_len = c1h.li_len
+            li_off = c1h.li_off
+            c1_pend = False
+
+        py_start = off
+
+        # Compute copy source addresses.
+        cp_src_rel = off - c1h.cp_off
+        cp_src_rc1_line = cp_src_rel >> WB
+        cp_src_rc1_offs = cp_src_rel & (WI-1)
+
+        # cp_src_rc1_line = relative; 0 = current line, positive is further
+        # forward.
+        st_addr = ~cp_src_rc1_line#-1 - cp_src_rc1_line
+        st_addr &= 31
+
+        # lt_addr = absolute; 0 = first line, 1 = second line, etc.
+        lt_val = cp_src_rc1_line < -31
+        lt_addr = lt_cnt + cp_src_rc1_line
+
+        lt_swap = bool(lt_addr & 1)
+        lt_adev = ((lt_addr + 1) >> 1) & (32767 >> WB)
+        lt_adod = (lt_addr >> 1) & (32767 >> WB)
+
+        # Determine the rotation/byte mux selection.
+        if c1h.cp_rle:
+            cp_rol = cp_src_rc1_offs
+        else:
+            cp_rol = (cp_src_rc1_offs - off) & (WI*2-1)
 
         # Determine how many byte slots are still available for the literal.
-        budget = (cp_len & (WI*2-1)) ^ (WI-1) # = WI - cp_chunk_len when it matters!
+        budget = (cp_len & (WI*2-1)) ^ (WI-1)
 
         # Update state for copy.
-        off += cp_chunk_len
-        cp_len -= cp_chunk_len
+        off += cp_len + 1
+
+        # Thanks to the preprocessing in stage 1, each copy command can be
+        # handled in a single cycle, so we're done with it now.
+        cp_len = -1
 
         # Save the offset after the copy so the datapath can derive which
         # bytes should come from the copy path.
         cp_end = off
 
-        # Handle literal data if we're done with the copy.
-        if cp_len < 0:
-            li_chunk_len = min(li_len + 1, WI*2 - li_off, budget)
-        else:
-            li_chunk_len = 0
+        # Handle literal data.
+        li_chunk_len = min(li_len + 1, WI*2 - li_off, budget)
 
         # Hardware optimization at the cost of a tiny amount of throughput;
         # can be disabled.
@@ -261,30 +309,26 @@ def cmd_gen(elements):
 
         # If this is the last element input stream entry, don't pop it until
         # we're completely done with it (not just done with decoding it).
-        finishing = elh.last and (li_len >= 0 or cp_len >= 0)
+        finishing = c1h.last and (li_len >= 0 or cp_len >= 0)
 
         # Invalidate the element record when we have no more need for it, so
         # the next record can be loaded.
         ld_pop = False
         last = False
-        if elh_valid and not (cp_len >= 0 or el_pend or ld_pend or finishing):
-            elh_valid = False
-            ld_pop = elh.ld_pop
-            last = elh.last
+        if c1h_valid and not (cp_len >= 0 or c1_pend or ld_pend or finishing):
+            c1h_valid = False
+            ld_pop = c1h.ld_pop
+            last = c1h.last
             li_off -= WI
             if last:
                 off = 0
                 lt_cnt = 0
-                #el_pend = False
-                #cp_len = -1
-                #li_len = -1
-                #li_off = 0
 
         yield CommandStream(
             lt_val, lt_adev, lt_adod, lt_swap,
-            st_addr, cp_rol, cp_rle, cp_end,
+            st_addr, cp_rol, c1h.cp_rle, cp_end,
             li_rol, li_end, ld_pop, last,
-            elh.py_data, py_start)
+            c1h.py_data, py_start)
 
 
 class SRL:

@@ -128,6 +128,55 @@ class ElementStream(_ElementStream):
             '<o=%-2d l=%d>,' % (self.li_off, self.li_len+1) if self.li_val else '-,',
             'pop' if self.ld_pop else '-  ')
 
+_PartialCommandStream = namedtuple('_PartialCommandStream', [
+    'cp_off',   # copy element offset, preprocessed such that cp_off >= cp_len
+    'cp_len',   # copy element length (diminished-1), preprocessed to limit to 8 bytes, -1 for invalid
+    'cp_rle',   # enable run-length acceleration for copy
+    'li_val',   # literal element valid
+    'li_off',   # offset of the literal data in the current line
+    'li_len',   # literal element length as recorded in the element (diminished-1)
+    'ld_pop',   # pop the literal data FIFO to advance to the next line afterwards
+    'last',     # indicator for last element data in chunk
+    'py_data',  # literal data that accompanies this block, doesn't exist in hardware
+])
+
+class PartialCommandStream(_PartialCommandStream):
+    def __new__(cls, *args, **kwargs):
+        c1 = super(PartialCommandStream, cls).__new__(cls, *args, **kwargs)
+        assert is_unsigned(c1.cp_off, 16)
+        assert is_signed(c1.cp_len, WB+1)
+        assert is_std_logic(c1.cp_rle)
+        if c1.cp_rle:
+            assert c1.cp_off == 1 or c1.cp_len < 0
+        else:
+            assert c1.cp_off > c1.cp_len or c1.cp_len < 0
+        assert is_std_logic(c1.li_val)
+        assert is_unsigned(c1.li_off, WB+1)
+        assert is_unsigned(c1.li_len, 16)
+        assert is_std_logic(c1.ld_pop)
+        assert is_std_logic(c1.last)
+        assert c1.ld_pop or not c1.last
+        return c1
+
+    def serialize(self):
+        s = []
+        s.append(binary(self.cp_off, 16, self.cp_len >= 0))
+        s.append(binary(self.cp_len, WB+1))
+        s.append(binary(self.li_val, 1))
+        s.append(binary(self.li_off, WB+1, self.li_val))
+        s.append(binary(self.li_len, 16, self.li_val))
+        s.append(binary(self.ld_pop, 1))
+        s.append(binary(self.last, 1))
+        return ''.join(s)
+
+    def __repr__(self):
+        return 'C1([%s%s, cp=%-15s li=%-15s ld=%s)' % (
+            safe_chr(self.py_data, oneline=True),
+            '>' if self.last else ']',
+            '<o=%-5d l=%d>,' % (self.cp_off, self.cp_len+1) if self.cp_len >= 0 else '-,',
+            '<o=%-2d l=%d>,' % (self.li_off, self.li_len+1) if self.li_val else '-,',
+            'pop' if self.ld_pop else '-  ')
+
 _CommandStream = namedtuple('_CommandStream', [
     'lt_val',   # enable long-term memory read
     'lt_adev',  # long-term memory line address for the even line/array

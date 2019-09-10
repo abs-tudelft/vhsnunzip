@@ -66,6 +66,11 @@ def is_unsigned(value, bits):
     unsigned with the given length."""
     return not (value & ~(2**bits-1))
 
+def is_signed(value, bits):
+    """Returns whether the given value is the Python equivalent of an
+    signed with the given length."""
+    return value >= -2**(bits-1) and value < 2**(bits-1)
+
 def is_std_logic_vector(value, bits):
     """Returns whether the given value is the Python equivalent of an
     std_logic_vector with the given length."""

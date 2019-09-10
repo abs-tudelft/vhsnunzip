@@ -45,7 +45,8 @@ print('Simulating decompression in Python...')
 cs = Counter(writer(data_source(compressed), '../vhdl/cs.tv'))
 cd = Counter(writer(pre_decoder(cs), '../vhdl/cd.tv'))
 el = Counter(writer(decoder(cd), '../vhdl/el.tv'))
-cm = Counter(writer(cmd_gen(el), '../vhdl/cm.tv'))
+c1 = Counter(writer(cmd_gen_1(el), '../vhdl/c1.tv'))
+cm = Counter(writer(cmd_gen_2(c1), '../vhdl/cm.tv'))
 de = Counter(writer(datapath(cm), '../vhdl/de.tv'))
 for _ in verifier(de, uncompressed):
     pass
@@ -64,8 +65,8 @@ print()
 print('Statistics:')
 print('  Uncompressed size=%d, compressed size=%d, chunk count=%d' % (
     len(data), sum(map(len, compressed)), len(compressed)))
-print('  Stream transfer counts: cs=%d, cd=%d, el=%d, cm=%d, de=%d' % (
-    cs.count, cd.count, el.count, cm.count, de.count))
+print('  Stream transfer counts: cs=%d, cd=%d, el=%d, c1=%d, cm=%d, de=%d' % (
+    cs.count, cd.count, el.count, c1.count, cm.count, de.count))
 print('  Approx. bytes/cycle: %.3f' % (
     len(data) / cm.count))
 

@@ -67,7 +67,8 @@ while True:
     cs = Counter(data_source(compressed))
     cd = Counter(pre_decoder(cs))
     el = Counter(decoder(cd))
-    cm = Counter(cmd_gen(el))
+    c1 = Counter(cmd_gen_1(el))
+    cm = Counter(cmd_gen_2(c1))
     de = Counter(datapath(cm))
 
     for _ in verifier(de, uncompressed):
