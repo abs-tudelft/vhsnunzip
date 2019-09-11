@@ -252,7 +252,7 @@ def cmd_gen_2(partial_commands):
         st_addr &= 31
 
         # lt_addr = absolute; 0 = first line, 1 = second line, etc.
-        lt_val = cp_src_rc1_line < -31
+        lt_val = cp_src_rc1_line < -31 and cp_len >= 0
         lt_addr = lt_cnt + cp_src_rc1_line
 
         lt_swap = bool(lt_addr & 1)

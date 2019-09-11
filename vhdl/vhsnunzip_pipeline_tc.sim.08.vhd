@@ -21,6 +21,19 @@ architecture testcase of vhsnunzip_pipeline_tc is
   signal co         : compressed_stream_single := COMPRESSED_STREAM_SINGLE_INIT;
   signal co_ready   : std_logic := '0';
 
+  signal dbg_cs     : compressed_stream_single;
+  signal dbg_cs_exp : compressed_stream_single;
+  signal dbg_cd     : compressed_stream_double;
+  signal dbg_cd_exp : compressed_stream_double;
+  signal dbg_el     : element_stream;
+  signal dbg_el_exp : element_stream;
+  signal dbg_c1     : partial_command_stream;
+  signal dbg_c1_exp : partial_command_stream;
+  signal dbg_cm     : command_stream;
+  signal dbg_cm_exp : command_stream;
+  signal dbg_s1     : command_stream;
+  signal dbg_s1_exp : command_stream;
+
   signal de         : decompressed_stream := DECOMPRESSED_STREAM_INIT;
   signal de_ready   : std_logic := '0';
 
@@ -62,6 +75,12 @@ begin
       lt_rd_next    => lt_next,
       lt_rd_even    => lt_even,
       lt_rd_odd     => lt_odd,
+      dbg_cs        => dbg_cs,
+      dbg_cd        => dbg_cd,
+      dbg_el        => dbg_el,
+      dbg_c1        => dbg_c1,
+      dbg_cm        => dbg_cm,
+      dbg_s1        => dbg_s1,
       de            => de,
       de_ready      => de_ready
     );
@@ -103,11 +122,11 @@ begin
 
     while not endfile(fil) loop
 
---       loop
---         uniform(s1, s2, rnd);
---         exit when rnd < 0.5;
---         wait until rising_edge(clk);
---       end loop;
+      loop
+        uniform(s1, s2, rnd);
+        exit when rnd < 0.5;
+        wait until rising_edge(clk);
+      end loop;
 
       readline(fil, lin);
       stream_des(lin, co_v, true);
@@ -142,11 +161,11 @@ begin
 
     while not endfile(fil) loop
 
---       loop
---         uniform(s1, s2, rnd);
---         exit when rnd < 0.3;
---         wait until rising_edge(clk);
---       end loop;
+      loop
+        uniform(s1, s2, rnd);
+        exit when rnd < 0.3;
+        wait until rising_edge(clk);
+      end loop;
 
       readline(fil, lin);
       stream_des(lin, de_v, false);
@@ -159,13 +178,11 @@ begin
       end loop;
       de_ready <= '0';
 
---       for i in 0 to 15 loop
---         assert std_match(de_v.data(i), de.data(i)) severity failure;
---       end loop;
---       assert std_match(de_v.first, de.first) severity failure;
---       assert std_match(de_v.start, de.start) severity failure;
---       assert std_match(de_v.last, de.last) severity failure;
---       assert std_match(de_v.endi, de.endi) severity failure;
+      for i in 0 to 7 loop
+        assert std_match(de_v.data(i), de.data(i)) severity failure;
+      end loop;
+      assert std_match(de_v.last, de.last) severity failure;
+      assert std_match(de_v.cnt, de.cnt) severity failure;
 
     end loop;
     file_close(fil);
@@ -189,13 +206,13 @@ begin
     variable rnd  : real;
   begin
 
---     lt_ready <= '0';
--- 
---     loop
---       uniform(s1, s2, rnd);
---       exit when rnd < 0.3;
---       wait until rising_edge(clk);
---     end loop;
+    lt_ready <= '0';
+
+    loop
+      uniform(s1, s2, rnd);
+      exit when rnd < 0.3;
+      wait until rising_edge(clk);
+    end loop;
 
     lt_ready <= '1';
 
@@ -239,6 +256,219 @@ begin
         lt_ptr <= (others => '0');
       end if;
     end if;
+  end process;
+
+
+  cs_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable cs_v : compressed_stream_single;
+  begin
+    file_open(fil, "cs.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, cs_v, false);
+      dbg_cs_exp <= cs_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_cs.valid = '1';
+      end loop;
+
+      for i in 0 to 7 loop
+        assert std_match(cs_v.data(i), dbg_cs.data(i)) severity failure;
+      end loop;
+      assert std_match(cs_v.last, dbg_cs.last) severity failure;
+      assert std_match(cs_v.endi, dbg_cs.endi) severity failure;
+
+    end loop;
+    file_close(fil);
+    wait;
+  end process;
+
+  cd_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable cd_v : compressed_stream_double;
+  begin
+    file_open(fil, "cd.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, cd_v, false);
+      dbg_cd_exp <= cd_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_cd.valid = '1';
+      end loop;
+
+      for i in 0 to 15 loop
+        assert std_match(cd_v.data(i), dbg_cd.data(i)) severity failure;
+      end loop;
+      assert std_match(cd_v.first, dbg_cd.first) severity failure;
+      assert std_match(cd_v.start, dbg_cd.start) severity failure;
+      assert std_match(cd_v.last, dbg_cd.last) severity failure;
+      assert std_match(cd_v.endi, dbg_cd.endi) severity failure;
+
+    end loop;
+    file_close(fil);
+    wait;
+  end process;
+
+  el_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable el_v : element_stream;
+  begin
+    file_open(fil, "el.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, el_v, false);
+      dbg_el_exp <= el_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_el.valid = '1';
+      end loop;
+
+      assert std_match(el_v.cp_val, dbg_el.cp_val) severity failure;
+      assert std_match(el_v.cp_off, dbg_el.cp_off) severity failure;
+      assert std_match(el_v.cp_len, dbg_el.cp_len) severity failure;
+      assert std_match(el_v.li_val, dbg_el.li_val) severity failure;
+      assert std_match(el_v.li_off, dbg_el.li_off) severity failure;
+      assert std_match(el_v.li_len, dbg_el.li_len) severity failure;
+      assert std_match(el_v.ld_pop, dbg_el.ld_pop) severity failure;
+      assert std_match(el_v.last, dbg_el.last) severity failure;
+
+    end loop;
+    file_close(fil);
+    wait;
+  end process;
+
+  c1_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable c1_v : partial_command_stream;
+  begin
+    file_open(fil, "c1.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, c1_v, false);
+      dbg_c1_exp <= c1_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_c1.valid = '1';
+      end loop;
+
+      assert std_match(c1_v.cp_off, dbg_c1.cp_off) severity failure;
+      assert std_match(c1_v.cp_len, dbg_c1.cp_len) severity failure;
+      assert std_match(c1_v.cp_rle, dbg_c1.cp_rle) severity failure;
+      assert std_match(c1_v.li_val, dbg_c1.li_val) severity failure;
+      assert std_match(c1_v.li_off, dbg_c1.li_off) severity failure;
+      assert std_match(c1_v.li_len, dbg_c1.li_len) severity failure;
+      assert std_match(c1_v.ld_pop, dbg_c1.ld_pop) severity failure;
+      assert std_match(c1_v.last, dbg_c1.last) severity failure;
+
+    end loop;
+    file_close(fil);
+    wait;
+  end process;
+
+  cm_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable cm_v : command_stream;
+  begin
+    file_open(fil, "cm.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, cm_v, false);
+      dbg_cm_exp <= cm_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_cm.valid = '1';
+      end loop;
+
+      assert std_match(cm_v.lt_val, dbg_cm.lt_val) severity failure;
+      assert std_match(cm_v.lt_adev, dbg_cm.lt_adev) severity failure;
+      assert std_match(cm_v.lt_adod, dbg_cm.lt_adod) severity failure;
+      assert std_match(cm_v.lt_swap, dbg_cm.lt_swap) severity failure;
+      assert std_match(cm_v.st_addr, dbg_cm.st_addr) severity failure;
+      assert std_match(cm_v.cp_rol, dbg_cm.cp_rol) severity failure;
+      assert std_match(cm_v.cp_rle, dbg_cm.cp_rle) severity failure;
+      assert std_match(cm_v.cp_end, dbg_cm.cp_end) severity failure;
+      assert std_match(cm_v.li_rol, dbg_cm.li_rol) severity failure;
+      assert std_match(cm_v.li_end, dbg_cm.li_end) severity failure;
+      assert std_match(cm_v.ld_pop, dbg_cm.ld_pop) severity failure;
+      assert std_match(cm_v.last, dbg_cm.last) severity failure;
+
+    end loop;
+    file_close(fil);
+    wait;
+  end process;
+
+  s1_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable s1_v : command_stream;
+  begin
+    file_open(fil, "cm.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, s1_v, false);
+      dbg_s1_exp <= s1_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_s1.valid = '1';
+      end loop;
+
+      assert std_match(s1_v.lt_val, dbg_s1.lt_val) severity failure;
+      assert std_match(s1_v.lt_swap, dbg_s1.lt_swap) severity failure;
+      assert std_match(s1_v.st_addr, dbg_s1.st_addr) severity failure;
+      assert std_match(s1_v.cp_rol, dbg_s1.cp_rol) severity failure;
+      assert std_match(s1_v.cp_rle, dbg_s1.cp_rle) severity failure;
+      assert std_match(s1_v.cp_end, dbg_s1.cp_end) severity failure;
+      assert std_match(s1_v.li_rol, dbg_s1.li_rol) severity failure;
+      assert std_match(s1_v.li_end, dbg_s1.li_end) severity failure;
+      assert std_match(s1_v.ld_pop, dbg_s1.ld_pop) severity failure;
+      assert std_match(s1_v.last, dbg_s1.last) severity failure;
+
+    end loop;
+    file_close(fil);
+    wait;
   end process;
 
 end testcase;

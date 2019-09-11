@@ -5,6 +5,10 @@ use ieee.numeric_std.all;
 library work;
 use work.vhsnunzip_pkg.all;
 
+library std;
+use std.textio.all;
+use ieee.math_real.all;
+
 -- Snappy decompression pipeline.
 entity vhsnunzip_pipeline is
   port (
@@ -44,7 +48,17 @@ entity vhsnunzip_pipeline is
     lt_rd_even  : in  byte_array(0 to 7);
     lt_rd_odd   : in  byte_array(0 to 7);
 
-    -- Decompressed data input stream.
+    -- pragma translate_off
+    -- Debug outputs.
+    dbg_cs      : out compressed_stream_single;
+    dbg_cd      : out compressed_stream_double;
+    dbg_el      : out element_stream;
+    dbg_c1      : out partial_command_stream;
+    dbg_cm      : out command_stream;
+    dbg_s1      : out command_stream;
+    -- pragma translate_on
+
+    -- Decompressed data output stream.
     de          : out decompressed_stream;
     de_ready    : in  std_logic;
     de_level    : out unsigned(5 downto 0)
@@ -86,6 +100,7 @@ architecture behavior of vhsnunzip_pipeline is
   -- Command stream FIFO read-side signals.
   signal s1_cm_ctrl   : std_logic_vector(25 downto 0);
   signal s1_cm        : command_stream;
+  signal s1_cm_exp    : command_stream;
 
   -- Start/valid signal for datapath stage 1. Indicates that all stage 0 inputs
   -- are valid, and that all stage 2 inputs will be valid in the next cycle.
@@ -215,6 +230,14 @@ begin
 
   end generate;
 
+  -- pragma translate_off
+  dbg_cs_proc: process (cs, cs_ready) is
+  begin
+    dbg_cs <= cs;
+    dbg_cs.valid <= cs.valid and cs_ready;
+  end process;
+  -- pragma translate_on
+
   -- Pre-decoder. This parallelizes the input stream so two lines of data are
   -- available for decoding. This prevents needing logic to handle element
   -- headers that cross a line boundary; we can just look into the next line
@@ -229,6 +252,14 @@ begin
       cd_ready    => cd_ready
     );
 
+  -- pragma translate_off
+  dbg_cd_proc: process (cd, cd_ready) is
+  begin
+    dbg_cd <= cd;
+    dbg_cd.valid <= cd.valid and cd_ready;
+  end process;
+  -- pragma translate_on
+
   -- Main decoder. This decodes the element headers and seeks past the literal
   -- data.
   main_dec_inst: vhsnunzip_decoder
@@ -241,6 +272,14 @@ begin
       el_ready    => el_ready
     );
 
+  -- pragma translate_off
+  dbg_el_proc: process (el, el_ready) is
+  begin
+    dbg_el <= el;
+    dbg_el.valid <= el.valid and el_ready;
+  end process;
+  -- pragma translate_on
+
   -- Datapath command generator stage 1. This splits copies up into chunks that
   -- we can handle in a single cycle.
   cmd_gen_1_inst: vhsnunzip_cmd_gen_1
@@ -252,6 +291,14 @@ begin
       c1          => c1,
       c1_ready    => c1_ready
     );
+
+  -- pragma translate_off
+  dbg_c1_proc: process (c1, c1_ready) is
+  begin
+    dbg_c1 <= c1;
+    dbg_c1.valid <= c1.valid and c1_ready;
+  end process;
+  -- pragma translate_on
 
   -- Datapath command generator stage 2. This splits literal writes up into
   -- chunks, limited by the amount of slots already taken by the copy chunk
@@ -267,6 +314,14 @@ begin
       cm          => cm,
       cm_ready    => cm_ready
     );
+
+  -- pragma translate_off
+  dbg_cm_proc: process (cm, cm_ready) is
+  begin
+    dbg_cm <= cm;
+    dbg_cm.valid <= cm.valid and cm_ready;
+  end process;
+  -- pragma translate_on
 
   -- After the command generator, we don't have backpressure-capable register
   -- slices anymore. Instead, we apply backpressure to the command generator
@@ -324,7 +379,7 @@ begin
   s1_cm.cp_end <= unsigned(s1_cm_ctrl(15 downto 12));
   s1_cm.li_rol <= unsigned(s1_cm_ctrl(19 downto 16));
   s1_cm.li_end <= unsigned(s1_cm_ctrl(23 downto 20));
-  s1_cm.ld_pop <= cm_ctrl(24);
+  s1_cm.ld_pop <= s1_cm_ctrl(24);
   s1_cm.last <= s1_cm_ctrl(25);
 
   -- Determine whether all data sources for stage 0 are ready. We just check
@@ -334,6 +389,14 @@ begin
   -- always insert a stall cycle afterward, so the datapath has a chance to
   -- push the contents of its output holding register. We can't backpressure
   s1_valid <= s1_cm.valid and (lt_rd_next or not s1_cm.lt_val) and not s2_last;
+
+  -- pragma translate_off
+  dbg_s1_proc: process (s1_cm, s1_valid) is
+  begin
+    dbg_s1 <= s1_cm;
+    dbg_s1.valid <= s1_valid;
+  end process;
+  -- pragma translate_on
 
   -- Stage 1 logic + stage 1-2 registers.
   s1_reg_proc: process (clk) is
@@ -424,7 +487,7 @@ begin
       for byte in 0 to 7 loop
 
         -- Determine whether this byte is a literal or a copy.
-        if cp_end_th(byte) = '1' and li_end_th(byte + 8) = '0' then
+        if (cp_end_th(byte) = '1' and li_end_th(byte + 8) = '0') or cp_end_th(byte + 8) = '1' then
 
           -- Before copy end on the current line, and not used for a literal
           -- on the next line, so this is a copied byte.
@@ -537,7 +600,7 @@ begin
         -- indicates which of these is the current line and which is the
         -- lookahead (swap low -> even = current). If we set the bit low, we
         -- select the even line.
-        s2_lt_sel(byte) <= s1_cm.lt_swap xor li_ahead;
+        s2_lt_sel(byte) <= s1_cm.lt_swap xor cp_ahead;
 
         -- Compute the short-term memory read address for this byte.
         st_addr := s1_cm.st_addr;

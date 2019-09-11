@@ -135,7 +135,7 @@ begin
         -- while the long-term memory is pipelined, has port arbiters, and so
         -- on, so it has significant write-to-read latency.
         if cp_rel(16 downto 3) < -31 then
-          cmh.lt_val := '1';
+          cmh.lt_val := not cp_len(3);
         else
           cmh.lt_val := '0';
         end if;

@@ -12,11 +12,11 @@ while True:
 
     # Test lots of English Unicode text.
     data = b''
-    with open('/home/jeroen/writing/01-the-hunt/output/01-the-hunt.txt', 'rb') as fil:
+    with open('/localhome/jeroen/writing/01-the-hunt/01-the-hunt.src.rtf', 'rb') as fil:
         data += fil.read() + b'\n\n\n'
-    with open('/home/jeroen/writing/02-the-anomaly/output/02-the-anomaly.txt', 'rb') as fil:
+    with open('/localhome/jeroen/writing/02-the-anomaly/02-the-anomaly.src.rtf', 'rb') as fil:
         data += fil.read() + b'\n\n\n'
-    with open('/home/jeroen/writing/03-the-rescue/output/03-the-rescue.txt', 'rb') as fil:
+    with open('/localhome/jeroen/writing/03-the-rescue/03-the-rescue.src.rtf', 'rb') as fil:
         data += fil.read() + b'\n\n\n'
 
     # Test data which can be compressed nicely with run-length encoding.

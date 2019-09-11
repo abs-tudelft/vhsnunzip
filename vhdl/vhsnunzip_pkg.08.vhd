@@ -6,10 +6,12 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.std_logic_textio.all;
 
+library work;
+use work.vhsnunzip_utils_pkg.all;
+
 package vhsnunzip_pkg is
 
-  -- Returns 'U' during simulation, but '0' during synthesis.
-  function undef_fn return std_logic;
+  -- 'U' during simulation, '0' during synthesis.
   constant UNDEF    : std_logic := undef_fn;
 
   -- Generic array of bytes.
@@ -427,6 +429,14 @@ package vhsnunzip_pkg is
       lt_rd_next  : in  std_logic;
       lt_rd_even  : in  byte_array(0 to 7);
       lt_rd_odd   : in  byte_array(0 to 7);
+      -- pragma translate_off
+      dbg_cs      : out compressed_stream_single;
+      dbg_cd      : out compressed_stream_double;
+      dbg_el      : out element_stream;
+      dbg_c1      : out partial_command_stream;
+      dbg_cm      : out command_stream;
+      dbg_s1      : out command_stream;
+      -- pragma translate_on
       de          : out decompressed_stream;
       de_ready    : in  std_logic;
       de_level    : out unsigned(5 downto 0)
@@ -436,15 +446,6 @@ package vhsnunzip_pkg is
 end package vhsnunzip_pkg;
 
 package body vhsnunzip_pkg is
-
-  function undef_fn return std_logic is
-    variable retval : std_logic := '0';
-  begin
-    -- pragma translate_off
-    retval := 'U';
-    -- pragma translate_on
-    return retval;
-  end function;
 
   procedure stream_des(l: inout line; value: out compressed_stream_single; to_x: boolean) is
   begin

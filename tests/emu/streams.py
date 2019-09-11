@@ -216,7 +216,7 @@ class CommandStream(_CommandStream):
     def serialize(self):
         s = []
         cp_val = self.cp_end > self.py_start
-        s.append(binary(self.lt_val, 1, cp_val))
+        s.append(binary(self.lt_val, 1))
         s.append(binary(self.lt_adev, 15-WB, self.lt_val and cp_val))
         s.append(binary(self.lt_adod, 15-WB, self.lt_val and cp_val))
         s.append(binary(self.lt_swap, 1, cp_val))
