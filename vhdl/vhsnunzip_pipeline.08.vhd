@@ -5,10 +5,6 @@ use ieee.numeric_std.all;
 library work;
 use work.vhsnunzip_pkg.all;
 
-library std;
-use std.textio.all;
-use ieee.math_real.all;
-
 -- Snappy decompression pipeline.
 entity vhsnunzip_pipeline is
   port (

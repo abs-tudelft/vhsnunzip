@@ -47,6 +47,9 @@ begin
       -- Shift new data into the input when we can.
       if elh.valid = '0' then
         elh := el;
+        if elh.valid = '1' then
+          assert cp_rem = "1111111";
+        end if;
         if elh.valid = '1' and elh.cp_val = '1' then
           cp_rem := signed(resize(elh.cp_len, 7));
         end if;
