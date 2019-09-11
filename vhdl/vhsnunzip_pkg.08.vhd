@@ -443,6 +443,61 @@ package vhsnunzip_pkg is
     );
   end component;
 
+  -- RAM port command.
+  type ram_command is record
+
+    -- Valid bit.
+    valid         : std_logic;
+
+    -- Read/write address.
+    addr          : unsigned(11 downto 0);
+
+    -- Set high to write, low to read.
+    wren          : std_logic;
+
+    -- Data to write.
+    wdat          : byte_array(0 to 7);
+
+    -- Control info to write (saved in parity bit storage).
+    wctrl         : std_logic_vector(7 downto 0);
+
+  end record;
+
+  type ram_command_array is array (natural range <>) of ram_command;
+
+  -- RAM port response.
+  type ram_response is record
+
+    -- Valid bit. Asserted only for *read* access results.
+    valid         : std_logic;
+
+    -- Data that was read.
+    rdat          : byte_array(0 to 7);
+
+    -- Control info that was read..
+    rctrl         : std_logic_vector(7 downto 0);
+
+  end record;
+
+  type ram_response_array is array (natural range <>) of ram_response;
+
+  -- Unit representing a single Xilinx URAM or collection of 8 BRAMs. There are
+  -- two files for this entity; one is a behavioral model intended for
+  -- vendor-agnostic simulation, the other contains the Xilinx primitives (and
+  -- their simulation models) to instantiate the memories.
+  component vhsnunzip_ram is
+    generic (
+      RAM_STYLE   : string := "URAM"
+    );
+    port (
+      clk         : in  std_logic;
+      a_cmd       : in  ram_command;
+      a_resp      : out ram_response;
+      b_cmd       : in  ram_command;
+      b_resp      : out ram_response
+    );
+  end component;
+
 end package vhsnunzip_pkg;
 
 package body vhsnunzip_pkg is
