@@ -2,6 +2,8 @@
 import random
 from emu.operators import *
 from emu.snappy import compress
+import vhdeps
+import sys
 
 seed = 0
 
@@ -75,15 +77,20 @@ while True:
                 self.pop_count += 1
             return ret
 
-    cs = Counter(data_source(compressed))
-    cd = Counter(pre_decoder(cs))
-    el = PopCounter(decoder(cd))
-    c1 = PopCounter(cmd_gen_1(el))
-    cm = PopCounter(cmd_gen_2(c1))
-    de = Counter(datapath(cm))
+    cs = Counter(writer(data_source(compressed), '../vhdl/cs.tv'))
+    cd = Counter(writer(pre_decoder(cs), '../vhdl/cd.tv'))
+    el = PopCounter(writer(decoder(cd), '../vhdl/el.tv'))
+    c1 = PopCounter(writer(cmd_gen_1(el), '../vhdl/c1.tv'))
+    cm = PopCounter(writer(cmd_gen_2(c1), '../vhdl/cm.tv'))
+    de = Counter(writer(datapath(cm), '../vhdl/de.tv'))
 
     for _ in verifier(de, uncompressed):
         pass
+
+    print('Checking that VHDL and Python streams match...')
+    code = vhdeps.run_cli(['ghdl', 'vhsnunzip_pipeline_tc', '-i', '..'])
+    if code != 0:
+        sys.exit(code)
 
     print('uncompressed size=%d, compressed size=%d, chunk count=%d' % (
         len(data), sum(map(len, compressed)), len(compressed)))
