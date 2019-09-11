@@ -7,7 +7,7 @@ use work.TestCase_pkg.all;
 use work.ClockGen_pkg.all;
 use work.StreamSource_pkg.all;
 use work.StreamSink_pkg.all;
-use work.vhsnunzip_pkg.all;
+use work.vhsnunzip_int_pkg.all;
 
 entity vhsnunzip_fifo_tc is
 end vhsnunzip_fifo_tc;

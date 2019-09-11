@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.vhsnunzip_pkg.all;
+use work.vhsnunzip_int_pkg.all;
 
 -- Behavioral description of a Xilinx URAM or collection of 8 BRAMs. 4k deep,
 -- 8+1 bytes wide, for 32+4kiB of storage, with two R/W access ports. The total
@@ -22,6 +22,7 @@ entity vhsnunzip_ram is
   );
   port (
     clk         : in  std_logic;
+    reset       : in  std_logic;
 
     -- Access port A.
     a_cmd       : in  ram_command;
@@ -84,7 +85,7 @@ begin
         end if;
       end if;
 
-      b_resp_v(0).valid := '0';
+      b_resp_v(1).valid := '0';
       b_resp_v(0).rdat  := (others => (others => 'U'));
       b_resp_v(0).rctrl := (others => 'U');
       if b_cmd_v(CMD_STAGES).valid = '1' then
@@ -92,10 +93,22 @@ begin
           ram(to_integer(b_cmd_v(CMD_STAGES).addr)).data <= b_cmd_v(CMD_STAGES).wdat;
           ram(to_integer(b_cmd_v(CMD_STAGES).addr)).ctrl <= b_cmd_v(CMD_STAGES).wctrl;
         else
-          b_resp_v(0).valid := '1';
+          b_resp_v(1).valid := '1';
           b_resp_v(0).rdat := ram(to_integer(b_cmd_v(CMD_STAGES).addr)).data;
           b_resp_v(0).rctrl := ram(to_integer(b_cmd_v(CMD_STAGES).addr)).ctrl;
         end if;
+      end if;
+
+      -- Handle reset for the valid bits.
+      if reset = '1' then
+        for i in 0 to CMD_STAGES loop
+          a_cmd_v(i).valid := '0';
+          b_cmd_v(i).valid := '0';
+        end loop;
+        for i in 0 to RESP_STAGES loop
+          a_resp_v(i).valid := '0';
+          b_resp_v(i).valid := '0';
+        end loop;
       end if;
 
       -- Output the results.

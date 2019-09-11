@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.vhsnunzip_pkg.all;
+use work.vhsnunzip_int_pkg.all;
 
 -- Decompression datapath command generator stage 2.
 entity vhsnunzip_cmd_gen_2 is

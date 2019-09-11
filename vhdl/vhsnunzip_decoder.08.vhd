@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.vhsnunzip_pkg.all;
+use work.vhsnunzip_int_pkg.all;
 
 -- Snappy element decoder.
 entity vhsnunzip_decoder is

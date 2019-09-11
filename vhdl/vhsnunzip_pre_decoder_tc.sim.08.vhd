@@ -7,7 +7,7 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 library work;
-use work.vhsnunzip_pkg.all;
+use work.vhsnunzip_int_pkg.all;
 
 entity vhsnunzip_pre_decoder_tc is
 end vhsnunzip_pre_decoder_tc;

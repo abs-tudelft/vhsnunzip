@@ -88,7 +88,7 @@ while True:
         pass
 
     print('Checking that VHDL and Python streams match...')
-    code = vhdeps.run_cli(['ghdl', 'vhsnunzip_pipeline_tc', '-i', '..'])
+    code = vhdeps.run_cli(['ghdl', 'vhsnunzip_streaming_tc', '-i', '..'])
     if code != 0:
         sys.exit(code)
 

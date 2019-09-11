@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 library work;
-use work.vhsnunzip_pkg.all;
+use work.vhsnunzip_int_pkg.all;
 
 -- Snappy decompression pipeline.
 entity vhsnunzip_pipeline is
@@ -33,7 +33,7 @@ entity vhsnunzip_pipeline is
     -- Furthermore, the latency between handshaking the address and the read
     -- result must be constant.
     lt_rd_valid : out std_logic;
-    lt_rd_ready : in  std_logic;
+    lt_rd_ready : in  std_logic := '1';
     lt_rd_adev  : out unsigned(11 downto 0);
     lt_rd_adod  : out unsigned(11 downto 0);
 

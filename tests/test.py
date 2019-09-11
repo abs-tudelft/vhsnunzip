@@ -57,7 +57,7 @@ code = vhdeps.run_cli([
     vhdeps_target,
     'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_tc',
     'vhsnunzip_cmd_gen_1_tc', 'vhsnunzip_cmd_gen_2_tc',
-    'vhsnunzip_pipeline_tc',
+    'vhsnunzip_pipeline_tc', 'vhsnunzip_streaming_tc',
     '-i', '..'] + vhdeps_args)
 if code != 0:
     sys.exit(code)
