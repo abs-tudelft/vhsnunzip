@@ -774,7 +774,7 @@ begin
             -- If it wasn't, we need to update the count to reflect the size of
             -- the partial line.
             if s2_ext_strb(7) = '0' then
-              s3_out_cnt <= resize(s3_cnt, 4);
+              s3_out_cnt <= resize(s2_cnt, 4);
             end if;
 
           end if;

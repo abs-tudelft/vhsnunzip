@@ -83,7 +83,7 @@ begin
           -- Without run-length=1 acceleration, we can't copy more bytes at
           -- once than the copy offset, because we'd be reading beyond what
           -- we've written already.
-          if unsigned(c1h.cp_len(2 downto 0)) >= elh.cp_off then
+          if unsigned(c1h.cp_len(2 downto 0)) >= elh.cp_off and c1h.cp_len(3) = '0' then
             c1h.cp_len(2 downto 0) := signed(resize(elh.cp_off(3 downto 0) - 1, 3));
 
             -- We can however accelerate subsequent copies; after the first
