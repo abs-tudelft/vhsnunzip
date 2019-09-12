@@ -106,7 +106,6 @@ architecture behavior of vhsnunzip_pipeline is
   signal s2_valid     : std_logic;
 
   -- Some array types.
-  type std_logic_array is array (natural range <>) of std_logic;
   type srl_addr_array is array (natural range <>) of unsigned(4 downto 0);
   type rol_array is array (natural range <>) of unsigned(2 downto 0);
 

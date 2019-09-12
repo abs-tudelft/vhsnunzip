@@ -7,7 +7,10 @@ use work.vhsnunzip_int_pkg.all;
 
 -- Streaming toplevel for vhsnunzip. This version of the decompressor doesn't
 -- include any large-scale input and output stream buffering, so the streams
--- are limited to the speed of the decompression engine.
+-- are limited to the speed of the decompression engine. However, because the
+-- long-term memory isn't also used for buffering, the decompression engine
+-- will never be internally bandwidth-starved, so decompression will be a bit
+-- faster.
 entity vhsnunzip_streaming is
   generic (
 

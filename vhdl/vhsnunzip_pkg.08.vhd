@@ -28,4 +28,29 @@ package vhsnunzip_pkg is
     );
   end component;
 
+  -- Buffered toplevel for a single vhsnunzip core. This version of the
+  -- decompressor uses the RAMs needed for long-term decompression history
+  -- storage for input/output FIFOs as well. This allows the data to be pumped
+  -- in using a much wider bus (32-byte) and without stalling, but total
+  -- decompression time may be longer due to memory bandwidth starvation.
+  component vhsnunzip_buffered is
+    generic (
+      RAM_STYLE   : string := "URAM"
+    );
+    port (
+      clk         : in  std_logic;
+      reset       : in  std_logic;
+      in_valid    : in  std_logic;
+      in_ready    : out std_logic;
+      in_data     : in  std_logic_vector(255 downto 0);
+      in_cnt      : in  std_logic_vector(4 downto 0);
+      in_last     : in  std_logic;
+      out_valid   : out std_logic;
+      out_ready   : in  std_logic;
+      out_data    : out std_logic_vector(255 downto 0);
+      out_cnt     : out std_logic_vector(4 downto 0);
+      out_last    : out std_logic
+    );
+  end component;
+
 end package vhsnunzip_pkg;
