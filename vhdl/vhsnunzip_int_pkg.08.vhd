@@ -472,6 +472,9 @@ package vhsnunzip_int_pkg is
     -- Valid bit. Asserted only for *read* access results.
     valid         : std_logic;
 
+    -- Like valid, but asserted one cycle earlier.
+    valid_next    : std_logic;
+
     -- Data that was read.
     rdat          : byte_array(0 to 7);
 

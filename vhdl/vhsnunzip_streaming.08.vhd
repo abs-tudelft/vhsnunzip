@@ -180,7 +180,7 @@ begin
 
   lt_rd_even <= ev_rd_resp.rdat;
   lt_rd_odd  <= od_rd_resp.rdat;
-  lt_rd_next <= od_rd_resp.valid;
+  lt_rd_next <= od_rd_resp.valid_next;
 
   -- RAM containing the even 8-byte lines of decompression history.
   ram_even_inst: vhsnunzip_ram

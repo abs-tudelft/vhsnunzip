@@ -43,12 +43,14 @@ begin
     signal a_wdat     : std_logic_vector(71 downto 0);
     signal a_rval_r   : std_logic;
     signal a_rval_rr  : std_logic;
+    signal a_rval_rrr : std_logic;
     signal a_rdat     : std_logic_vector(71 downto 0);
 
     signal b_addr     : std_logic_vector(22 downto 0);
     signal b_wdat     : std_logic_vector(71 downto 0);
     signal b_rval_r   : std_logic;
     signal b_rval_rr  : std_logic;
+    signal b_rval_rrr : std_logic;
     signal b_rdat     : std_logic_vector(71 downto 0);
   begin
 
@@ -118,7 +120,8 @@ begin
         a_resp.rdat(byte) <= a_rdat(byte*8+7 downto byte*8);
       end loop;
       a_resp.rctrl <= a_rdat(71 downto 64);
-      a_resp.valid <= a_rval_rr;
+      a_resp.valid <= a_rval_rrr;
+      b_resp.valid_next <= b_rval_rr;
     end process;
 
     b_resp_connect_proc: process (b_rdat, b_rval_rr) is
@@ -127,7 +130,8 @@ begin
         b_resp.rdat(byte) <= b_rdat(byte*8+7 downto byte*8);
       end loop;
       b_resp.rctrl <= b_rdat(71 downto 64);
-      b_resp.valid <= b_rval_rr;
+      b_resp.valid <= b_rval_rrr;
+      b_resp.valid_next <= b_rval_rr;
     end process;
 
     resp_valid_proc: process (clk) is
@@ -137,11 +141,15 @@ begin
         b_rval_r <= b_cmd.valid and not b_cmd.wren;
         a_rval_rr <= a_rval_r;
         b_rval_rr <= b_rval_r;
+        a_rval_rrr <= a_rval_rr;
+        b_rval_rrr <= b_rval_rr;
         if reset = '1' then
           a_rval_r <= '0';
           b_rval_r <= '0';
           a_rval_rr <= '0';
           b_rval_rr <= '0';
+          a_rval_rrr <= '0';
+          b_rval_rrr <= '0';
         end if;
       end if;
     end process;

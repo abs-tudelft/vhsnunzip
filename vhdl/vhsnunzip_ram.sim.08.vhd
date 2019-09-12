@@ -85,7 +85,8 @@ begin
         end if;
       end if;
 
-      b_resp_v(1).valid := '0';
+      b_resp_v(0).valid := '0';
+      b_resp_v(1).valid_next := '0';
       b_resp_v(0).rdat  := (others => (others => 'U'));
       b_resp_v(0).rctrl := (others => 'U');
       if b_cmd_v(CMD_STAGES).valid = '1' then
@@ -93,7 +94,8 @@ begin
           ram(to_integer(b_cmd_v(CMD_STAGES).addr)).data <= b_cmd_v(CMD_STAGES).wdat;
           ram(to_integer(b_cmd_v(CMD_STAGES).addr)).ctrl <= b_cmd_v(CMD_STAGES).wctrl;
         else
-          b_resp_v(1).valid := '1';
+          b_resp_v(0).valid := '1';
+          b_resp_v(1).valid_next := '1';
           b_resp_v(0).rdat := ram(to_integer(b_cmd_v(CMD_STAGES).addr)).data;
           b_resp_v(0).rctrl := ram(to_integer(b_cmd_v(CMD_STAGES).addr)).ctrl;
         end if;
