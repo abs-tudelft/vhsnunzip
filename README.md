@@ -4,7 +4,7 @@ Hardware Snappy decompressor
 Work in progress
 ----------------
 
-**The code contained here is still a work in progress, but should be completed shortly. See [#1](issues/1).**
+**The code contained here is still a work in progress, but should be completed shortly. See [#1](https://github.com/jvanstraten/vhsnunzip/issues/1).**
 
 This repository contains a block that can decompress chunks of up to 64kiB of
 data (inclusive) compressed using [Snappy](https://github.com/google/snappy)
