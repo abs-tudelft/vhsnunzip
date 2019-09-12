@@ -11,7 +11,7 @@ use work.vhsnunzip_int_pkg.all;
 -- long-term memory isn't also used for buffering, the decompression engine
 -- will never be internally bandwidth-starved, so decompression will be a bit
 -- faster.
-entity vhsnunzip_streaming is
+entity vhsnunzip_unbuffered is
   generic (
 
     -- This block can use either 2 UltraRAMs or 16 Xilinx 36k block RAMs.
@@ -64,9 +64,9 @@ entity vhsnunzip_streaming is
     de_last     : out std_logic
 
   );
-end vhsnunzip_streaming;
+end vhsnunzip_unbuffered;
 
-architecture behavior of vhsnunzip_streaming is
+architecture behavior of vhsnunzip_unbuffered is
 
   -- Pipeline interface signals.
   signal co           : compressed_stream_single;

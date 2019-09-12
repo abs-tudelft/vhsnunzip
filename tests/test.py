@@ -2,15 +2,14 @@
 
 import random
 import sys
-import vhdeps
 import itertools
 from emu.operators import *
 from emu.snappy import compress
 
 # Parse command line.
 def usage():
-    print('Usage: %s <test-data-file> [generic/key=value [...]] -- \\\n'
-          '  <vhdeps target> [vhdeps options...]' % sys.argv[0], file=sys.stderr)
+    print('Usage: %s <test-data-file> [config=value [...]] \\\n'
+          '  [-- <vhdeps target> [vhdeps options...]]' % sys.argv[0], file=sys.stderr)
     sys.exit(2)
 try:
     args = iter(sys.argv)
@@ -20,7 +19,10 @@ try:
         lambda x: tuple(x.split('=', maxsplit=1)),
         itertools.takewhile(lambda x: x != '--', args))}
     vhdeps_target, *vhdeps_args = args
-except (StopIteration, ValueError):
+except ValueError:
+    vhdeps_target = None
+    vhdeps_args = []
+except StopIteration:
     usage()
 
 # Seed the random generator.
@@ -51,16 +53,18 @@ de = Counter(writer(datapath(cm), '../vhdl/de.tv'))
 for _ in verifier(de, uncompressed):
     pass
 
-# Run vhdeps.
-print('Checking that VHDL and Python streams match...')
-code = vhdeps.run_cli([
-    vhdeps_target,
-    'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_tc',
-    'vhsnunzip_cmd_gen_1_tc', 'vhsnunzip_cmd_gen_2_tc',
-    'vhsnunzip_pipeline_tc', 'vhsnunzip_streaming_tc',
-    '-i', '..'] + vhdeps_args)
-if code != 0:
-    sys.exit(code)
+# Run vhdeps if requested.
+if vhdeps_target is not None:
+    print('Checking that VHDL and Python streams match...')
+    import vhdeps
+    code = vhdeps.run_cli([
+        vhdeps_target,
+        'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_tc',
+        'vhsnunzip_cmd_gen_1_tc', 'vhsnunzip_cmd_gen_2_tc',
+        'vhsnunzip_pipeline_tc', 'vhsnunzip_unbuffered_tc',
+        '-i', '..'] + vhdeps_args)
+    if code != 0:
+        sys.exit(code)
 
 print()
 print('Statistics:')

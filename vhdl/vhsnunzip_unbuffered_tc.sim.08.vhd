@@ -10,13 +10,13 @@ library work;
 use work.vhsnunzip_pkg.all;
 use work.vhsnunzip_int_pkg.all;
 
-entity vhsnunzip_streaming_tc is
+entity vhsnunzip_unbuffered_tc is
   generic (
     RAM_STYLE       : string := "URAM"
   );
-end vhsnunzip_streaming_tc;
+end vhsnunzip_unbuffered_tc;
 
-architecture testcase of vhsnunzip_streaming_tc is
+architecture testcase of vhsnunzip_unbuffered_tc is
 
   signal clk        : std_logic := '0';
   signal reset      : std_logic := '1';
@@ -39,7 +39,7 @@ architecture testcase of vhsnunzip_streaming_tc is
 
 begin
 
-  uut: vhsnunzip_streaming
+  uut: vhsnunzip_unbuffered
     generic map (
       RAM_STYLE     => RAM_STYLE
     )

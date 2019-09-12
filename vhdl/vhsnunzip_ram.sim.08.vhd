@@ -72,6 +72,7 @@ begin
 
       -- Execute the commands.
       a_resp_v(0).valid := '0';
+      a_resp_v(1).valid_next := '0';
       a_resp_v(0).rdat  := (others => (others => 'U'));
       a_resp_v(0).rctrl := (others => 'U');
       if a_cmd_v(CMD_STAGES).valid = '1' then
@@ -80,6 +81,7 @@ begin
           ram(to_integer(a_cmd_v(CMD_STAGES).addr)).ctrl <= a_cmd_v(CMD_STAGES).wctrl;
         else
           a_resp_v(0).valid := '1';
+          a_resp_v(1).valid_next := '1';
           a_resp_v(0).rdat := ram(to_integer(a_cmd_v(CMD_STAGES).addr)).data;
           a_resp_v(0).rctrl := ram(to_integer(a_cmd_v(CMD_STAGES).addr)).ctrl;
         end if;
