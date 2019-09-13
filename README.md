@@ -11,7 +11,7 @@ data (inclusive) compressed using [Snappy](https://github.com/google/snappy)
 [raw format](https://github.com/google/snappy/blob/master/format_description.txt).
 It was written to read Snappy-compressed [Parquet](https://parquet.apache.org/)
 files, but could be used in other contexts as well, as long as the chunk size
-is limited. The targeted FPGA family is Xilinx Ultrascale+, but aside from the
+is limited. The targeted FPGA family is Xilinx UltraScale+, but aside from the
 memory primitives that were unfortunately necessary it is vendor agnostic.
 
 Two kinds of toplevel units are defined: a single-core block and a multi-core
@@ -19,14 +19,15 @@ block. The single-core block is faster per core, but the overall throughput of
 the multi-core version can obviously be made much higher. Some numbers for the
 cores for a Virtex UltraScale+ with speed grade -2:
 
-|             | Single-core | Buffered single-core | 5-core | 8-core |
-|-------------|-------------|----------------------|--------|--------|
-| f_max       | ~285MHz     | ~285MHz              | ???‡   | ???‡   |
-| LUTs        | ~1600       | ~2500                | ???‡   | ???‡   |
-| Registers   | ~900        | ~2300                | ???‡   | ???‡   |
-| BRAMs*      | 0           | 0                    | 16     | 16     |
-| URAMs*      | 2           | 2                    | 8      | 14     |
-| Throughput† | 5.5 B/cycle | ???                  | ???‡   | ???‡   |
+| Parameter              | Single-core   | Buffered single-core | 5-core         | 8-core         |
+|------------------------|---------------|----------------------|----------------|----------------|
+| f_max                  | ~285MHz       | ~285MHz              | ~250MHz        | ~250MHz        |
+| LUTs                   | ~1600 (0.4%‡) | ~2500 (0.6%‡)        | ~12800 (3.2%‡) | ~20400 (5.2%‡) |
+| Registers              | ~900  (0.1%‡) | ~2300 (0.3%‡)        | ~12000 (1.5%‡) | ~19200 (2.4%‡) |
+| BRAMs*                 | 0             | 0                    | 16 (2.2%‡)     | 32 (4.4%‡)     |
+| URAMs*                 | 2 (0.6%)      | 2 (0.6%‡)            | 8 (2.5%‡)      | 12 (3.8%‡)     |
+| Throughput per cycle†  | 5.5 B/cycle   | TODO                 | TODO           | TODO           |
+| Throughput per second† | 1.5 GB/s      | TODO                 | TODO           | TODO           |
 
 *Each core can be configured to use 2 URAMs or 16 BRAMs, depending on what's
 available. The multi-core design will by default try to match the BRAM/URAM
@@ -38,8 +39,7 @@ compressor) is ~2.5 bytes per cycle; theoretical maximum per core is 8 bytes
 per cycle; theoretical maximum per multicore design is 32 bytes per cycle.
 The throughput numbers are output/decompressed-referenced.
 
-‡The multicore design is still a work in progress.
-
+‡Relative to the size of a VU3P (the smallest Virtex UltraScale+ device).
 
 Usage
 -----
