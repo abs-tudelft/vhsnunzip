@@ -25,7 +25,7 @@ cores for a Virtex UltraScale+ with speed grade -2:
 | LUTs                   | ~1600 (0.4%‡) | ~2500 (0.6%‡)        | ~12800 (3.2%‡) | ~20700 (5.3%‡) |
 | Registers              | ~900  (0.1%‡) | ~2300 (0.3%‡)        | ~12000 (1.5%‡) | ~19200 (2.4%‡) |
 | BRAMs*                 | 0             | 0                    | 16 (2.2%‡)     | 32 (4.4%‡)     |
-| URAMs*                 | 2 (0.6%)      | 2 (0.6%‡)            | 8 (2.5%‡)      | 12 (3.8%‡)     |
+| URAMs*                 | 2 (0.6%‡)     | 2 (0.6%‡)            | 8 (2.5%‡)      | 12 (3.8%‡)     |
 | Throughput per cycle†  | 5.5 B/cycle   | TODO                 | TODO           | TODO           |
 | Throughput per second† | 1.5 GB/s      | TODO                 | TODO           | TODO           |
 
