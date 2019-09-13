@@ -32,7 +32,7 @@ package vhsnunzip_pkg is
   -- the above in parallel and interleaves them.
   component vhsnunzip is
     generic (
-      COUNT       : positive;
+      COUNT       : positive := 5;
       B2U_MUL     : natural := 21;
       B2U_DIV     : positive := 10
     );

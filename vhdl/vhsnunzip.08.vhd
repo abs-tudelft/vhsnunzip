@@ -16,7 +16,7 @@ entity vhsnunzip is
   generic (
 
     -- Number of decompression cores to instantiate.
-    COUNT       : positive := 6;
+    COUNT       : positive := 5;
 
     -- (Desired) ratio of block RAM to UltraRAM usage, expressed as a fraction.
     -- The defaults below represent the ratio available in most Virtex
@@ -235,7 +235,7 @@ begin
 
   -- Forward internal signal copies.
   in_ready <= in_ready_i;
-  out_valid_i <= out_valid;
-  out_last_i <= out_last;
+  out_valid <= out_valid_i;
+  out_last <= out_last_i;
 
 end behavior;

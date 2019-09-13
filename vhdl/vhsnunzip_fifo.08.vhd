@@ -27,13 +27,13 @@ entity vhsnunzip_fifo is
     -- Write data input stream.
     wr_valid    : in  std_logic;
     wr_ready    : out std_logic;
-    wr_data     : in  byte_array(0 to 7) := (others => X"00");
+    wr_data     : in  byte_array(0 to DATA_WIDTH-1) := (others => X"00");
     wr_ctrl     : in  std_logic_vector(CTRL_WIDTH-1 downto 0) := (others => '0');
 
     -- Read data output stream.
     rd_valid    : out std_logic;
     rd_ready    : in  std_logic;
-    rd_data     : out byte_array(0 to 7);
+    rd_data     : out byte_array(0 to DATA_WIDTH-1);
     rd_ctrl     : out std_logic_vector(CTRL_WIDTH-1 downto 0);
 
     -- FIFO level. This is diminished-one-encoded! That is, -1 is empty, 0 is

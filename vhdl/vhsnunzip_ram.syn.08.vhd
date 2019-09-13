@@ -8,6 +8,9 @@ use work.vhsnunzip_int_pkg.all;
 library unisim;
 use unisim.vcomponents.all;
 
+library unimacro;
+use unimacro.vcomponents.all;
+
 -- Primitive instantiation of a Xilinx URAM or collection of 8 BRAMs. 4k deep,
 -- 8+1 bytes wide, for 32+4kiB of storage, with two R/W access ports. The total
 -- read latency is exactly 3 cycles.
@@ -114,17 +117,17 @@ begin
         inject_sbiterr_b  => '0'
       );
 
-    a_resp_connect_proc: process (a_rdat, a_rval_rr) is
+    a_resp_connect_proc: process (a_rdat, a_rval_rr, a_rval_rrr) is
     begin
       for byte in 0 to 7 loop
         a_resp.rdat(byte) <= a_rdat(byte*8+7 downto byte*8);
       end loop;
       a_resp.rctrl <= a_rdat(71 downto 64);
       a_resp.valid <= a_rval_rrr;
-      b_resp.valid_next <= b_rval_rr;
+      a_resp.valid_next <= a_rval_rr;
     end process;
 
-    b_resp_connect_proc: process (b_rdat, b_rval_rr) is
+    b_resp_connect_proc: process (b_rdat, b_rval_rr, b_rval_rrr) is
     begin
       for byte in 0 to 7 loop
         b_resp.rdat(byte) <= b_rdat(byte*8+7 downto byte*8);
@@ -157,8 +160,128 @@ begin
   end generate;
 
   bram_gen: if RAM_STYLE = "BRAM" generate
+    type data_array is array (natural range <>) of std_logic_vector(8 downto 0);
+
+    signal a_ena      : std_logic;
+    signal a_addr     : std_logic_vector(11 downto 0);
+    signal a_we       : std_logic_vector(0 downto 0);
+    signal a_rval_r   : std_logic;
+    signal a_rval_rr  : std_logic;
+    signal a_rval_rrr : std_logic;
+    signal a_wdat     : data_array(0 to 7);
+    signal a_rdat     : data_array(0 to 7);
+
+    signal b_ena      : std_logic;
+    signal b_addr     : std_logic_vector(11 downto 0);
+    signal b_we       : std_logic_vector(0 downto 0);
+    signal b_rval_r   : std_logic;
+    signal b_rval_rr  : std_logic;
+    signal b_rval_rrr : std_logic;
+    signal b_wdat     : data_array(0 to 7);
+    signal b_rdat     : data_array(0 to 7);
+
   begin
-    assert RAM_STYLE /= "BRAM" report "not yet implemented!" severity failure;
+
+    a_cmd_connect_proc: process (clk) is
+    begin
+      if rising_edge(clk) then
+        a_ena <= a_cmd.valid;
+        a_addr <= std_logic_vector(a_cmd.addr);
+        a_we <= (others => a_cmd.wren);
+        for byte in 0 to 7 loop
+          a_wdat(byte)(7 downto 0) <= a_cmd.wdat(byte);
+          a_wdat(byte)(8) <= a_cmd.wctrl(byte);
+        end loop;
+      end if;
+    end process;
+
+    b_cmd_connect_proc: process (clk) is
+    begin
+      if rising_edge(clk) then
+        b_ena <= b_cmd.valid;
+        b_addr <= std_logic_vector(b_cmd.addr);
+        b_we <= (others => b_cmd.wren);
+        for byte in 0 to 7 loop
+          b_wdat(byte)(7 downto 0) <= b_cmd.wdat(byte);
+          b_wdat(byte)(8) <= b_cmd.wctrl(byte);
+        end loop;
+      end if;
+    end process;
+
+    byte_gen: for byte in 0 to 7 generate
+    begin
+      bram: bram_tdp_macro
+        generic map (
+          BRAM_SIZE     => "36Kb",
+          DOA_REG       => 1,
+          DOB_REG       => 1,
+          READ_WIDTH_A  => 9,
+          READ_WIDTH_B  => 9,
+          WRITE_WIDTH_A => 9,
+          WRITE_WIDTH_B => 9
+        )
+        port map (
+          clka          => clk,
+          clkb          => clk,
+          rsta          => '0',
+          rstb          => '0',
+          regcea        => '1',
+          regceb        => '1',
+
+          ena           => a_ena,
+          addra         => a_addr,
+          wea           => a_we,
+          dia           => a_wdat(byte),
+          doa           => a_rdat(byte),
+
+          enb           => b_ena,
+          addrb         => b_addr,
+          web           => b_we,
+          dib           => b_wdat(byte),
+          dob           => b_rdat(byte)
+        );
+    end generate;
+
+    a_resp_connect_proc: process (a_rdat, a_rval_rr, a_rval_rrr) is
+    begin
+      for byte in 0 to 7 loop
+        a_resp.rdat(byte) <= a_rdat(byte)(7 downto 0);
+        a_resp.rctrl(byte) <= a_rdat(byte)(8);
+      end loop;
+      a_resp.valid <= a_rval_rrr;
+      a_resp.valid_next <= a_rval_rr;
+    end process;
+
+    b_resp_connect_proc: process (b_rdat, b_rval_rr, b_rval_rrr) is
+    begin
+      for byte in 0 to 7 loop
+        b_resp.rdat(byte) <= b_rdat(byte)(7 downto 0);
+        b_resp.rctrl(byte) <= b_rdat(byte)(8);
+      end loop;
+      b_resp.valid <= b_rval_rrr;
+      b_resp.valid_next <= b_rval_rr;
+    end process;
+
+    resp_valid_proc: process (clk) is
+    begin
+      if rising_edge(clk) then
+        a_rval_r <= a_cmd.valid and not a_cmd.wren;
+        b_rval_r <= b_cmd.valid and not b_cmd.wren;
+        a_rval_rr <= a_rval_r;
+        b_rval_rr <= b_rval_r;
+        a_rval_rrr <= a_rval_rr;
+        b_rval_rrr <= b_rval_rr;
+        if reset = '1' then
+          a_rval_r <= '0';
+          b_rval_r <= '0';
+          a_rval_rr <= '0';
+          b_rval_rr <= '0';
+          a_rval_rrr <= '0';
+          b_rval_rrr <= '0';
+        end if;
+      end if;
+    end process;
+
   end generate;
 
 end behavior;
