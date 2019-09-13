@@ -123,15 +123,25 @@ begin
   arb_comb_proc: process (req, port_idx_r) is
     variable idx_bits   : unsigned(8 downto 0);
     variable port_idx_v : unsigned(1 downto 0);
+
+    function bit_to_01(x: std_logic) return std_logic is
+    begin
+      if x = '1' or x = 'H' then
+        return '1';
+      else
+        return '0';
+      end if;
+    end function;
   begin
 
     -- Construct the lookup table index. Basically, the F9 LUT inputs.
-    idx_bits(8 downto 7) := port_idx_r(0);
+    idx_bits(8) := bit_to_01(port_idx_r(0)(1));
+    idx_bits(7) := bit_to_01(port_idx_r(0)(0));
     for p in 0 to 3 loop
-      idx_bits(p*2) := req(p).valid;
+      idx_bits(p*2) := bit_to_01(req(p).valid);
     end loop;
     for p in 0 to 2 loop
-      idx_bits(p*2+1) := req(p).hipri;
+      idx_bits(p*2+1) := bit_to_01(req(p).hipri);
     end loop;
 
     -- Infer the LUT.
@@ -140,7 +150,7 @@ begin
 
     -- Decode the ready signals.
     for p in 0 to 3 loop
-      if port_idx = p then
+      if port_idx_v = p then
         req_ready(p) <= '1';
       else
         req_ready(p) <= '0';

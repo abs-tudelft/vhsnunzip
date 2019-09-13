@@ -15,6 +15,20 @@ def data_source(chunks):
             yield CompressedStreamSingle(data, last, endi)
 
 
+def wide_data_source(chunks):
+    """Represents a data provider. `chunks` should be an iterable of
+    chunk data, in turn represented as bytes objects. Yields a
+    `WideIOStream` stream."""
+
+    for chunk in chunks:
+        for offs in range(0, len(chunk), WI*4):
+            data = tuple(chunk[offs:offs+WI*4])
+            cnt = len(data)
+            data += (0,) * (WI*4 - len(data))
+            last = offs + WI*4 >= len(chunk)
+            yield WideIOStream(data, last, cnt)
+
+
 def pre_decoder(cs_stream):
     """Models the pre-decoder block."""
 
@@ -624,3 +638,9 @@ class Counter():
         ret = next(self.generator)
         self.count += 1
         return ret
+
+
+def drain(generator):
+    """Drains a generator to /dev/null."""
+    for _ in generator:
+        pass

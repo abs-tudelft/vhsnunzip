@@ -307,3 +307,32 @@ class DecompressedStream(_DecompressedStream):
             safe_chr(self.data[:self.cnt], oneline=True),
             '/' * (WI-self.cnt),
             '>' if self.last else '|')
+
+_WideIOStream = namedtuple('_WideIOStream', [
+    'data',     # decompressed data (WI*4 bytes)
+    'last',     # indicator for last line in chunk
+    'cnt',      # number of valid data bytes if last is set
+])
+
+class WideIOStream(_WideIOStream):
+    def __new__(cls, *args, **kwargs):
+        de = super(WideIOStream, cls).__new__(cls, *args, **kwargs)
+        assert is_byte_array(de.data, WI*4)
+        assert is_std_logic(de.last)
+        assert de.cnt == WI*4 or de.last
+        assert de.cnt >= 1
+        return de
+
+    def serialize(self):
+        s = []
+        for idx, value in reversed(list(enumerate(self.data))):
+            s.append(binary(value, 8, idx < self.cnt))
+        s.append(binary(self.last, 1))
+        s.append(binary(self.cnt & (WI*4-1), WB+2))
+        return ''.join(s)
+
+    def __repr__(self):
+        return 'WIDE(|%s%s%s)' % (
+            safe_chr(self.data[:self.cnt], oneline=True),
+            '/' * (WI*4-self.cnt),
+            '>' if self.last else '|')

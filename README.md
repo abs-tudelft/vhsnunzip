@@ -19,14 +19,14 @@ block. The single-core block is faster per core, but the overall throughput of
 the multi-core version can obviously be made much higher. Some numbers for the
 cores for a Virtex UltraScale+ with speed grade -2:
 
-|             | Single-core | 5-core | 8-core |
-|-------------|-------------|--------|--------|
-| f_max       | ~285MHz     | ???‡   | ???‡   |
-| LUTs        | ~1600       | ???‡   | ???‡   |
-| Registers   | ~900        | ???‡   | ???‡   |
-| BRAMs*      | 0           | 16     | 16     |
-| URAMs*      | 2           | 8      | 14     |
-| Throughput† | 5.5 B/cycle | ???‡   | ???‡   |
+|             | Single-core | Buffered single-core | 5-core | 8-core |
+|-------------|-------------|----------------------|--------|--------|
+| f_max       | ~285MHz     | ~285MHz              | ???‡   | ???‡   |
+| LUTs        | ~1600       | ~2500                | ???‡   | ???‡   |
+| Registers   | ~900        | ~2300                | ???‡   | ???‡   |
+| BRAMs*      | 0           | 0                    | 16     | 16     |
+| URAMs*      | 2           | 2                    | 8      | 14     |
+| Throughput† | 5.5 B/cycle | ???                  | ???‡   | ???‡   |
 
 *Each core can be configured to use 2 URAMs or 16 BRAMs, depending on what's
 available. The multi-core design will by default try to match the BRAM/URAM

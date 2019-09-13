@@ -258,7 +258,6 @@ begin
     end if;
   end process;
 
-
   cs_check_proc: process is
     file     fil  : text;
     variable lin  : line;

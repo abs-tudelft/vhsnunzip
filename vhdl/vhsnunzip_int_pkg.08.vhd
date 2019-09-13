@@ -584,7 +584,52 @@ package vhsnunzip_int_pkg is
       od_cmd      : out ram_command;
       ev_resp     : in  ram_response;
       od_resp     : in  ram_response
+    );
+  end component;
 
+  -- I/O stream for the buffered units, only used for simulation.
+  type wide_io_stream is record
+    valid     : std_logic;
+    data      : std_logic_vector(255 downto 0);
+    cnt       : std_logic_vector(4 downto 0);
+    last      : std_logic;
+  end record;
+
+  constant WIDE_IO_STREAM_INIT : wide_io_stream := (
+    valid     => '0',
+    data      => (others => UNDEF),
+    cnt       => (others => UNDEF),
+    last      => UNDEF
+  );
+
+  procedure stream_des(l: inout line; value: out wide_io_stream; to_x: boolean);
+
+  -- Buffered toplevel for a single vhsnunzip core. This version of the
+  -- decompressor uses the RAMs needed for long-term decompression history
+  -- storage for input/output FIFOs as well. This allows the data to be pumped
+  -- in using a much wider bus (32-byte) and without stalling, but total
+  -- decompression time may be longer due to memory bandwidth starvation.
+  component vhsnunzip_buffered is
+    generic (
+      RAM_STYLE   : string := "URAM"
+    );
+    port (
+      clk         : in  std_logic;
+      reset       : in  std_logic;
+      in_valid    : in  std_logic;
+      in_ready    : out std_logic;
+      in_data     : in  std_logic_vector(255 downto 0);
+      in_cnt      : in  std_logic_vector(4 downto 0);
+      in_last     : in  std_logic;
+      -- pragma translate_off
+      dbg_co      : out compressed_stream_single;
+      dbg_de      : out decompressed_stream;
+      -- pragma translate_on
+      out_valid   : out std_logic;
+      out_ready   : in  std_logic;
+      out_data    : out std_logic_vector(255 downto 0);
+      out_cnt     : out std_logic_vector(4 downto 0);
+      out_last    : out std_logic
     );
   end component;
 
@@ -718,6 +763,19 @@ package body vhsnunzip_int_pkg is
     read(l, value.last);
     read(l, value.cnt);
     if to_x then
+      value.last := to_x01(value.last);
+      value.cnt := to_x01(value.cnt);
+    end if;
+    value.valid := '1';
+  end procedure;
+
+  procedure stream_des(l: inout line; value: out wide_io_stream; to_x: boolean) is
+  begin
+    read(l, value.data);
+    read(l, value.last);
+    read(l, value.cnt);
+    if to_x then
+      value.data := to_x01(value.data);
       value.last := to_x01(value.last);
       value.cnt := to_x01(value.cnt);
     end if;

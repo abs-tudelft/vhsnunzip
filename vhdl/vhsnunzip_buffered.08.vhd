@@ -52,6 +52,12 @@ entity vhsnunzip_buffered is
     in_cnt      : in  std_logic_vector(4 downto 0);
     in_last     : in  std_logic;
 
+    -- pragma translate_off
+    -- Debug outputs.
+    dbg_co      : out compressed_stream_single;
+    dbg_de      : out decompressed_stream;
+    -- pragma translate_on
+
     -- Decompressed output stream. This stream is normalized.
     out_valid   : out std_logic;
     out_ready   : in  std_logic;
@@ -65,7 +71,6 @@ end vhsnunzip_buffered;
 architecture behavior of vhsnunzip_buffered is
 
   -- Pipeline interface signals.
-  signal pipe_reset     : std_logic;
   signal co             : compressed_stream_single;
   signal co_ready       : std_logic;
   signal co_level       : unsigned(5 downto 0);
@@ -83,14 +88,14 @@ architecture behavior of vhsnunzip_buffered is
   signal de_level       : unsigned(5 downto 0);
 
   -- Output FIFO signals.
-  signal of_data_val    : std_logic_vector(3 downto 0);
+  signal of_data_val    : std_logic_vector(1 downto 0);
   signal of_data        : std_logic_vector(255 downto 0);
   signal of_ctrl_val    : std_logic;
   signal of_cnt         : std_logic_vector(4 downto 0);
   signal of_last        : std_logic;
   signal of_level       : unsigned(5 downto 0);
   signal of_block       : std_logic;
-  signal outf_valid_vec : std_logic_vector(4 downto 0);
+  signal outf_valid_vec : std_logic_vector(2 downto 0);
   signal outf_valid     : std_logic;
   signal outf_ready     : std_logic;
 
@@ -134,16 +139,46 @@ architecture behavior of vhsnunzip_buffered is
   signal od_a_resp      : ram_response;
   signal od_b_resp      : ram_response;
 
+  -- State registers.
+  signal in_ptr_r       : unsigned(10 downto 0) := (others => '0');
+  signal co_ptr_r       : unsigned(11 downto 0) := (others => '0');
+  signal co_rem_r       : unsigned(12 downto 0) := (others => '1');
+  signal de_ptr_r       : unsigned(12 downto 0) := (others => '0');
+  signal de_last_seen_r : std_logic := '0';
+  signal of_ptr_r       : unsigned(10 downto 0) := (others => '0');
+  signal of_rem_r       : unsigned(11 downto 0) := (others => '1');
+  signal of_last_cnt_r  : unsigned(4 downto 0) := (others => '0');
+  signal level_r        : unsigned(11 downto 0) := (others => '0');
+  signal busy_r         : std_logic;
+
+  -- Internal reset signal, asserted when we've completed a chunk.
+  signal int_reset      : std_logic;
+
 begin
 
+  -- pragma translate_off
+  dbg_co_proc: process (co, co_ready) is
+  begin
+    dbg_co <= co;
+    dbg_co.valid <= co.valid and co_ready;
+  end process;
+  dbg_de_proc: process (de, de_ready) is
+  begin
+    dbg_de <= de;
+    dbg_de.valid <= de.valid and de_ready;
+  end process;
+  -- pragma translate_on
+
   -- Datapath.
-  datapath_inst: vhsnunzip_pipeline
+  pipeline_inst: vhsnunzip_pipeline
     port map (
       clk           => clk,
-      reset         => pipe_reset,
+      reset         => int_reset,
       co            => co,
       co_ready      => co_ready,
       co_level      => co_level,
+      lt_off_ld     => lt_off_ld,
+      lt_off        => lt_off,
       lt_rd_valid   => lt_rd_valid,
       lt_rd_ready   => lt_rd_ready,
       lt_rd_adev    => lt_rd_adev,
@@ -156,22 +191,40 @@ begin
       de_level      => de_level
     );
 
+  -- Connect the long-term read port to the pipeline.
+  lt_mreq <= (
+    valid    => lt_rd_valid,
+    hipri    => '0',
+    ev_addr  => lt_rd_adev,
+    od_addr  => lt_rd_adod,
+    ev_wren  => '0',
+    od_wren  => '0',
+    ev_wdat  => (others => X"00"),
+    od_wdat  => (others => X"00"),
+    ev_wctrl => (others => '0'),
+    od_wctrl => (others => '0')
+  );
+  lt_rd_ready <= lt_mreq_ready;
+  lt_rd_next  <= lt_mresp.ev.valid_next;
+  lt_rd_even  <= lt_mresp.ev.rdat;
+  lt_rd_odd   <= lt_mresp.od.rdat;
+
   -- Output FIFO. We need some kind of buffer here because we can't stall the
   -- memory access pipeline and can't predict ready ahead of time without one.
-  out_data_fifo_gen: for idx in 0 to 3 generate
+  out_data_fifo_gen: for idx in 0 to 1 generate
   begin
     out_data_fifo_inst: vhsnunzip_fifo
       generic map (
-        CTRL_WIDTH  => 64
+        CTRL_WIDTH  => 128
       )
       port map (
         clk         => clk,
         reset       => reset,
         wr_valid    => of_data_val(idx),
-        wr_ctrl     => of_data(64*idx+63 downto 64*idx),
+        wr_ctrl     => of_data(128*idx+127 downto 128*idx),
         rd_valid    => outf_valid_vec(idx),
         rd_ready    => outf_ready,
-        rd_ctrl     => out_data(64*idx+63 downto 64*idx)
+        rd_ctrl     => out_data(128*idx+127 downto 128*idx)
       );
   end generate;
 
@@ -185,7 +238,7 @@ begin
       wr_valid      => of_ctrl_val,
       wr_ctrl(5)    => of_last,
       wr_ctrl(4 downto 0) => of_cnt,
-      rd_valid      => outf_valid_vec(4),
+      rd_valid      => outf_valid_vec(2),
       rd_ready      => outf_ready,
       rd_ctrl(5)    => out_last,
       rd_ctrl(4 downto 0) => out_cnt,
@@ -196,9 +249,7 @@ begin
   out_fifo_connect_proc: process (of_mresp) is
   begin
     of_data_val(0) <= of_mresp(0).ev.valid;
-    of_data_val(1) <= of_mresp(0).od.valid;
-    of_data_val(2) <= of_mresp(1).ev.valid;
-    of_data_val(3) <= of_mresp(1).od.valid;
+    of_data_val(1) <= of_mresp(1).ev.valid;
     for byte in 0 to 7 loop
       of_data(byte*8+  0+7 downto byte*8+  0) <= of_mresp(0).ev.rdat(byte);
       of_data(byte*8+ 64+7 downto byte*8+ 64) <= of_mresp(0).od.rdat(byte);
@@ -207,14 +258,8 @@ begin
     end loop;
   end process;
 
-  -- Push the control data for the output along with one of the memory read
-  -- port commands.
-  of_ctrl_val <= of_mreq(0).valid and of_mreq_ready(0);
-
   -- The output stream validates when all FIFO outputs become valid.
-  outf_valid <= outf_valid_vec(0) and outf_valid_vec(1)
-            and outf_valid_vec(2) and outf_valid_vec(3)
-            and outf_valid_vec(4);
+  outf_valid <= outf_valid_vec(0) and outf_valid_vec(1) and outf_valid_vec(2);
   outf_ready <= outf_valid and out_ready;
   out_valid  <= outf_valid;
 
@@ -261,13 +306,14 @@ begin
   --
   -- We use the following state variables to manage this:
   --
-  --  - in_ptr: compressed write pointer;
-  --  - co_ptr: compressed read pointer;
-  --  - co_rem: (remaining) compressed chunk size, diminished-one;
-  --  - de_ptr: decompressed write pointer;
-  --  - of_ptr: decompressed read pointer;
-  --  - of_rem: (remaining) decompressed chunk size, diminished-one;
-  --  - level: FIFO level (explained below);
+  --  - in_ptr: compressed write pointer (in linequad units);
+  --  - co_ptr: compressed read pointer (in linepair units);
+  --  - co_rem: (remaining) compressed linepairs, diminished-one;
+  --  - co_busy: used to limit linepair reads to 50% duty cycle;
+  --  - de_ptr: decompressed write pointer (in line units);
+  --  - of_ptr: decompressed read pointer (in linequad units);
+  --  - of_rem: (remaining) decompressed linequads, diminished-two;
+  --  - level: FIFO level (in linequad units, explained below);
   --  - busy: whether we're decompressing.
   --
   -- The functionality of the pointers should be fairly obvious. co_rem acts
@@ -302,40 +348,49 @@ begin
   mem_management_proc: process (clk) is
 
     -- See comment block above for descriptions of these state variables.
-    variable in_ptr     : unsigned(12 downto 0) := (others => '0');
-    variable co_ptr     : unsigned(12 downto 0) := (others => '0');
-    variable co_rem     : unsigned(16 downto 0) := (others => '1');
-    variable de_ptr     : unsigned(12 downto 0) := (others => '0');
-    variable of_ptr     : unsigned(12 downto 0) := (others => '0');
-    variable of_rem     : unsigned(16 downto 0) := (others => '1');
-    variable level      : unsigned(12 downto 0) := (others => '0');
-    variable busy       : std_logic;
+    variable in_ptr       : unsigned(10 downto 0) := (others => '0');
+    variable co_ptr       : unsigned(11 downto 0) := (others => '0');
+    variable co_rem       : unsigned(12 downto 0) := (others => '1');
+    variable co_busy      : std_logic;
+    variable de_ptr       : unsigned(12 downto 0) := (others => '0');
+    variable de_last_seen : std_logic := '0';
+    variable of_ptr       : unsigned(10 downto 0) := (others => '0');
+    variable of_rem       : unsigned(11 downto 0) := (0 => '0', others => '1');
+    variable of_last_cnt  : unsigned(4 downto 0) := (others => '0');
+    variable level        : unsigned(11 downto 0) := (others => '0');
+    variable busy         : std_logic;
 
     -- Stream holding registers.
-    variable inh_valid  : std_logic;
-    variable inh_data   : std_logic_vector(255 downto 0);
-    variable inh_cnt    : std_logic_vector(4 downto 0);
-    variable inh_last   : std_logic;
-    variable coh        : compressed_stream_single;
-    variable deh        : decompressed_stream;
+    variable inh_valid    : std_logic;
+    variable inh_data     : std_logic_vector(255 downto 0);
+    variable inh_endi     : unsigned(4 downto 0);
+    variable inh_last     : std_logic;
+    variable coh          : compressed_stream_single;
+    variable deh          : decompressed_stream;
 
     -- Memory request output holding registers.
-    variable in_mreqh   : ram_request_array(0 to 1);
-    variable of_mreqh   : ram_request_array(0 to 1);
-    variable co_mreqh   : ram_request;
-    variable de_mreqh   : ram_request;
+    variable in_mreqh     : ram_request_array(0 to 1);
+    variable in_m_done    : std_logic_array(0 to 1);
+    variable of_mreqh     : ram_request_array(0 to 1);
+    variable co_mreqh     : ram_request;
+    variable de_mreqh     : ram_request;
 
   begin
     if rising_edge(clk) then
 
-      -- Buffer the pipeline reset flag here, so we can reset the pipeline when
-      -- recovering from a deadlock.
-      pipe_reset <= reset;
+      -- Load state register signals.
+      in_ptr        := in_ptr_r;
+      co_ptr        := co_ptr_r;
+      co_rem        := co_rem_r;
+      de_ptr        := de_ptr_r;
+      de_last_seen  := de_last_seen_r;
+      of_ptr        := of_ptr_r;
+      of_rem        := of_rem_r;
+      of_last_cnt   := of_last_cnt_r;
+      level         := level_r;
+      busy          := busy_r;
 
       -- Invalidate the stream output registers if they were shifted out.
-      if co_ready = '1' then
-        coh.valid := '0';
-      end if;
       for idx in 0 to 1 loop
         if in_mreq_ready(idx) = '1' then
           in_mreqh(idx).valid := '0';
@@ -345,7 +400,10 @@ begin
         end if;
       end loop;
       if co_mreq_ready = '1' then
+        co_busy := co_mreqh.valid;
         co_mreqh.valid := '0';
+      else
+        co_busy := '0';
       end if;
       if de_mreq_ready = '1' then
         de_mreqh.valid := '0';
@@ -354,45 +412,235 @@ begin
       -- Shift new data into the input when we can.
       if inh_valid = '0' and busy = '0' then
         inh_valid := in_valid;
-        inh_data  := in_data;
-        inh_cnt   := in_cnt;
+        inh_data := in_data;
+        inh_endi := unsigned(in_cnt) - 1;
         inh_last  := in_last;
+        in_m_done := "00";
       end if;
-      if coh.valid = '0' then
-        coh := co;
+      if deh.valid = '0' and busy = '1' then
+        deh := de;
       end if;
 
-      -- TODO magic that my sleepy brain cannot comprehend right now goes here.
+      -- Handle the input stream.
+      lt_off_ld <= '0';
+      in_mreqh(0).hipri := '0';
+      in_mreqh(1).hipri := '0';
+      in_mreqh(0).ev_wren := '1';
+      in_mreqh(0).od_wren := '1';
+      in_mreqh(1).ev_wren := '1';
+      in_mreqh(1).od_wren := '1';
+      in_mreqh(0).ev_addr(0) := '0';
+      in_mreqh(0).od_addr(0) := '0';
+      in_mreqh(1).ev_addr(0) := '1';
+      in_mreqh(1).od_addr(0) := '1';
+      if busy = '0' and inh_valid = '1' and level_r(11) = '0' then
+        for idx in 0 to 1 loop
+          if in_mreqh(idx).valid = '0' and in_m_done(idx) = '0' then
+            in_mreqh(idx).valid := '1';
+            in_mreqh(idx).ev_addr(11 downto 1) := in_ptr;
+            in_mreqh(idx).od_addr(11 downto 1) := in_ptr;
+            if idx = 0 then
+              for byte in 0 to 7 loop
+                in_mreqh(idx).ev_wdat(byte) := inh_data(byte*8+  0+7 downto byte*8+  0);
+                in_mreqh(idx).od_wdat(byte) := inh_data(byte*8+ 64+7 downto byte*8+ 64);
+              end loop;
+              in_mreqh(idx).ev_wctrl := X"0E";
+              in_mreqh(idx).od_wctrl := X"0E";
+              if inh_endi(4 downto 3) = "00" then
+                in_mreqh(idx).ev_wctrl(3 downto 1) := std_logic_vector(inh_endi(2 downto 0));
+                in_mreqh(idx).ev_wctrl(0) := inh_last;
+              end if;
+              if inh_endi(4 downto 3) = "01" then
+                in_mreqh(idx).od_wctrl(3 downto 1) := std_logic_vector(inh_endi(2 downto 0));
+                in_mreqh(idx).od_wctrl(0) := inh_last;
+              end if;
+            else
+              for byte in 0 to 7 loop
+                in_mreqh(idx).ev_wdat(byte) := inh_data(byte*8+128+7 downto byte*8+128);
+                in_mreqh(idx).od_wdat(byte) := inh_data(byte*8+192+7 downto byte*8+192);
+              end loop;
+              in_mreqh(idx).ev_wctrl := X"0E";
+              in_mreqh(idx).od_wctrl := X"0E";
+              if inh_endi(4 downto 3) = "10" then
+                in_mreqh(idx).ev_wctrl(3 downto 1) := std_logic_vector(inh_endi(2 downto 0));
+                in_mreqh(idx).ev_wctrl(0) := inh_last;
+              end if;
+              in_mreqh(idx).od_wctrl(3 downto 1) := std_logic_vector(inh_endi(2 downto 0));
+              in_mreqh(idx).od_wctrl(0) := inh_last;
+            end if;
+            in_m_done(idx) := '1';
+          end if;
+        end loop;
+
+        if in_m_done = "11" then
+          inh_valid := '0';
+          co_rem := co_rem + inh_endi(4 downto 4) + 1;
+          in_ptr := in_ptr + 1;
+          level := level + 1;
+          if inh_last = '1' then
+            busy := '1';
+            lt_off_ld <= '1';
+            de_ptr := in_ptr & "00";
+            of_ptr := in_ptr;
+          end if;
+        end if;
+      end if;
+      lt_off <= in_ptr & "00";
+
+      -- Handle the compressed data stream to the datapath.
+      co_mreqh.hipri := '0';
+      co_mreqh.ev_wren := '0';
+      co_mreqh.od_wren := '0';
+      co_mreqh.ev_wdat := (others => X"00");
+      co_mreqh.od_wdat := (others => X"00");
+      co_mreqh.ev_wctrl := (others => '0');
+      co_mreqh.od_wctrl := (others => '0');
+      if co_mreqh.valid = '0' and co_rem_r(12) = '0' then
+        if co_busy = '0' and (co_level(5) = '1' or co_level(4) = '0') then
+          co_mreqh.valid := '1';
+          co_mreqh.ev_addr := co_ptr;
+          co_mreqh.od_addr := co_ptr;
+          if co_ptr(0) = '1' then
+            level := level - 1;
+          end if;
+          co_ptr := co_ptr + 1;
+          co_rem := co_rem - 1;
+        end if;
+      end if;
+
+      co <= coh;
+      coh.valid := '0';
+      coh.data := co_mresp.od.rdat;
+      coh.last := co_mresp.od.rctrl(0);
+      coh.endi := unsigned(co_mresp.od.rctrl(3 downto 1));
+      if co_mresp.ev.valid = '1' then
+        co.valid <= '1';
+        co.data <= co_mresp.ev.rdat;
+        co.last <= co_mresp.ev.rctrl(0);
+        co.endi <= unsigned(co_mresp.ev.rctrl(3 downto 1));
+        coh.valid := not co_mresp.ev.rctrl(0); -- last
+      end if;
+
+      -- Handle the decompressed data stream from the datapath.
+      de_mreqh.hipri := '0';
+      de_mreqh.ev_wren := '1';
+      de_mreqh.od_wren := '1';
+      de_mreqh.ev_wctrl := (others => '0');
+      de_mreqh.od_wctrl := (others => '0');
+      if deh.valid = '1' and de_mreqh.valid = '0' and (level_r(11 downto 10) /= "10" or co_rem_r(12) = '1') then
+        deh.valid := '0';
+        de_mreqh.valid := de_ptr(0) or deh.last;
+        de_mreqh.ev_addr := de_ptr(12 downto 1);
+        de_mreqh.od_addr := de_ptr(12 downto 1);
+        if de_ptr(0) = '0' then
+          de_mreqh.ev_wdat := deh.data;
+        end if;
+        de_mreqh.od_wdat := deh.data;
+        if de_ptr(1 downto 0) = "11" or deh.last = '1' then
+          level := level + 1;
+          if deh.cnt /= "0000" or de_ptr(1 downto 0) /= "00" then
+            of_rem := of_rem + 1;
+          end if;
+        end if;
+        if deh.last = '1' then
+          de_last_seen := '1';
+        end if;
+        of_last_cnt := of_last_cnt + deh.cnt;
+        de_ptr := de_ptr + 1;
+      end if;
+
+      -- Reset ourselves (with the exception of the output FIFOs and memory
+      -- logic) when we're done with a chunk.
+      int_reset <= reset;
+      if of_rem_r(11) = '1' and of_rem_r(0) = '0' and de_last_seen_r = '1' then
+        if of_mreqh(0).valid = '0' and of_mreqh(1).valid = '0' then
+          int_reset <= not int_reset;
+        end if;
+      end if;
+
+      -- Handle the output stream.
+      of_ctrl_val <= '0';
+      of_cnt <= "00000";
+      of_last <= '0';
+      for idx in 0 to 1 loop
+        of_mreqh(idx).hipri := '0';
+        of_mreqh(idx).ev_wren := '0';
+        of_mreqh(idx).od_wren := '0';
+        of_mreqh(idx).ev_wdat := (others => X"00");
+        of_mreqh(idx).od_wdat := (others => X"00");
+        of_mreqh(idx).ev_wctrl := (others => '0');
+        of_mreqh(idx).od_wctrl := (others => '0');
+      end loop;
+      if (of_rem_r(11) = '0' or (of_rem_r(0) = '1' and de_last_seen_r = '1')) and of_block = '0' then
+        if of_mreqh(0).valid = '0' and of_mreqh(1).valid = '0' then
+          of_mreqh(0).valid := '1';
+          of_mreqh(1).valid := '1';
+          of_mreqh(0).ev_addr := of_ptr & "0";
+          of_mreqh(0).od_addr := of_ptr & "0";
+          of_mreqh(1).ev_addr := of_ptr & "1";
+          of_mreqh(1).od_addr := of_ptr & "1";
+
+          of_ctrl_val <= '1';
+          if of_rem(11) = '1' then
+            of_last <= '1';
+            of_cnt <= std_logic_vector(of_last_cnt);
+          end if;
+
+          of_rem := of_rem - 1;
+          of_ptr := of_ptr + 1;
+        end if;
+      end if;
 
       -- Handle reset.
       if reset = '1' then
-        in_ptr    := (others => '0');
-        co_ptr    := (others => '0');
-        co_rem    := (others => '1');
-        de_ptr    := (others => '0');
-        of_ptr    := (others => '0');
-        of_rem    := (others => '1');
-        level     := (others => '0');
-        busy      := '0';
-        inh_valid := '0';
-        coh.valid := '0';
-        deh.valid := '0';
+        inh_valid     := '0';
+      end if;
+      if int_reset = '1' then
+        in_ptr        := (others => '0');
+        co_ptr        := (others => '0');
+        co_rem        := (others => '1');
+        de_ptr        := (others => '0');
+        of_ptr        := (others => '0');
+        of_rem        := (0 => '0', others => '1');
+        of_last_cnt   := (others => '0');
+        de_last_seen  := '0';
+        level         := (others => '0');
+        busy          := '0';
+        coh.valid     := '0';
+        co.valid      <= '0';
+        co_busy       := '0';
+        deh.valid     := '0';
         in_mreqh(0).valid := '0';
         in_mreqh(1).valid := '0';
         of_mreqh(0).valid := '0';
         of_mreqh(1).valid := '0';
         co_mreqh.valid := '0';
         de_mreqh.valid := '0';
+        of_ctrl_val   <= '0';
+        of_cnt        <= "00000";
+        of_last       <= '0';
+        lt_off_ld     <= '0';
       end if;
 
       -- Assign outputs.
       in_ready <= not inh_valid and not busy;
-      co <= coh;
       de_ready <= not deh.valid and busy;
       in_mreq <= in_mreqh;
       of_mreq <= of_mreqh;
       co_mreq <= co_mreqh;
       de_mreq <= de_mreqh;
+
+      -- Assign state register signals.
+      in_ptr_r        <= in_ptr;
+      co_ptr_r        <= co_ptr;
+      co_rem_r        <= co_rem;
+      de_ptr_r        <= de_ptr;
+      de_last_seen_r  <= de_last_seen;
+      of_ptr_r        <= of_ptr;
+      of_rem_r        <= of_rem;
+      of_last_cnt_r   <= of_last_cnt;
+      level_r         <= level;
+      busy_r          <= busy;
 
     end if;
   end process;
@@ -455,6 +703,60 @@ begin
       ev_resp       => ev_b_resp,
       od_resp       => od_b_resp
     );
+
+--   arbiter_a_inst: vhsnunzip_port_arbiter
+--     generic map (
+--       IF_LO_PRIO    => (0 => 3, 1 => 3, 2 => 1, 3 => 4),
+--       IF_HI_PRIO    => (0 => 3, 1 => 3, 2 => 1),
+--       LATENCY       => 3
+--     )
+--     port map (
+--       clk           => clk,
+--       reset         => reset,
+--       req(0)        => in_mreq(0),
+--       req(1)        => in_mreq(1),
+--       req(2)        => co_mreq,
+--       req(3)        => de_mreq,
+--       req_ready(0)  => in_mreq_ready(0),
+--       req_ready(1)  => in_mreq_ready(1),
+--       req_ready(2)  => co_mreq_ready,
+--       req_ready(3)  => de_mreq_ready,
+--       resp(0)       => in_mresp(0),
+--       resp(1)       => in_mresp(1),
+--       resp(2)       => co_mresp,
+--       resp(3)       => de_mresp,
+--       ev_cmd        => ev_a_cmd,
+--       od_cmd        => od_a_cmd,
+--       ev_resp       => ev_a_resp,
+--       od_resp       => od_a_resp
+--     );
+--
+--   arbiter_b_inst: vhsnunzip_port_arbiter
+--     generic map (
+--       IF_LO_PRIO    => (0 => 3, 1 => 3, 2 => 2, 3 => 0),
+--       IF_HI_PRIO    => (0 => 3, 1 => 3, 2 => 2),
+--       LATENCY       => 3
+--     )
+--     port map (
+--       clk           => clk,
+--       reset         => reset,
+--       req(0)        => of_mreq(0),
+--       req(1)        => of_mreq(1),
+--       req(2)        => lt_mreq,
+--       req(3)        => RAM_REQUEST_INIT,
+--       req_ready(0)  => of_mreq_ready(0),
+--       req_ready(1)  => of_mreq_ready(1),
+--       req_ready(2)  => lt_mreq_ready,
+--       req_ready(3)  => unused_ready,
+--       resp(0)       => of_mresp(0),
+--       resp(1)       => of_mresp(1),
+--       resp(2)       => lt_mresp,
+--       resp(3)       => unused_resp,
+--       ev_cmd        => ev_b_cmd,
+--       od_cmd        => od_b_cmd,
+--       ev_resp       => ev_b_resp,
+--       od_resp       => od_b_resp
+--     );
 
   -- RAM containing the even 8-byte lines of decompression history.
   ram_even_inst: vhsnunzip_ram

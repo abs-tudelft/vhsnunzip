@@ -43,6 +43,10 @@ compressed, uncompressed = compress(
     max_prob=float(keys.pop('max_prob', '0')),
     verify=keys.pop('verify', None) != None)
 
+print('Write expected input and output...')
+drain(writer(wide_data_source(compressed), '../vhdl/in.tv'))
+drain(writer(wide_data_source(uncompressed), '../vhdl/out.tv'))
+
 print('Simulating decompression in Python...')
 cs = Counter(writer(data_source(compressed), '../vhdl/cs.tv'))
 cd = Counter(writer(pre_decoder(cs), '../vhdl/cd.tv'))
@@ -50,8 +54,7 @@ el = Counter(writer(decoder(cd), '../vhdl/el.tv'))
 c1 = Counter(writer(cmd_gen_1(el), '../vhdl/c1.tv'))
 cm = Counter(writer(cmd_gen_2(c1), '../vhdl/cm.tv'))
 de = Counter(writer(datapath(cm), '../vhdl/de.tv'))
-for _ in verifier(de, uncompressed):
-    pass
+drain(verifier(de, uncompressed))
 
 # Run vhdeps if requested.
 if vhdeps_target is not None:

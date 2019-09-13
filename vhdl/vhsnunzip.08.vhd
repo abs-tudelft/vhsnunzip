@@ -109,7 +109,7 @@ architecture behavior of vhsnunzip is
         if remain = 0 then
           return "URAM";
         end if;
-        urams := urams + 16;
+        urams := urams + 2;
       end if;
       remain := remain - 1;
     end loop;

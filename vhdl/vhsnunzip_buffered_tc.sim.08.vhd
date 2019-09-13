@@ -7,18 +7,15 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 library work;
-use work.vhsnunzip_pkg.all;
 use work.vhsnunzip_int_pkg.all;
 
-entity vhsnunzip_tc is
+entity vhsnunzip_buffered_tc is
   generic (
-    COUNT       : positive := 5;
-    B2U_MUL     : natural := 21;
-    B2U_DIV     : positive := 10
+    RAM_STYLE   : string := "URAM"
   );
-end vhsnunzip_tc;
+end vhsnunzip_buffered_tc;
 
-architecture testcase of vhsnunzip_tc is
+architecture testcase of vhsnunzip_buffered_tc is
 
   signal clk          : std_logic := '0';
   signal reset        : std_logic := '1';
@@ -26,6 +23,12 @@ architecture testcase of vhsnunzip_tc is
 
   signal inp          : wide_io_stream := WIDE_IO_STREAM_INIT;
   signal inp_ready    : std_logic := '0';
+
+  signal dbg_co       : compressed_stream_single;
+  signal dbg_co_exp   : compressed_stream_single;
+
+  signal dbg_de       : decompressed_stream;
+  signal dbg_de_exp   : decompressed_stream;
 
   signal outp         : wide_io_stream := WIDE_IO_STREAM_INIT;
   signal outp_ready   : std_logic := '0';
@@ -37,11 +40,9 @@ architecture testcase of vhsnunzip_tc is
 
 begin
 
-  uut: vhsnunzip
+  uut: vhsnunzip_buffered
     generic map (
-      COUNT         => COUNT,
-      B2U_MUL       => B2U_MUL,
-      B2U_DIV       => B2U_DIV
+      RAM_STYLE     => RAM_STYLE
     )
     port map (
       clk           => clk,
@@ -51,6 +52,8 @@ begin
       in_data       => inp.data,
       in_cnt        => inp.cnt,
       in_last       => inp.last,
+      dbg_co        => dbg_co,
+      dbg_de        => dbg_de,
       out_valid     => outp.valid,
       out_ready     => outp_ready,
       out_data      => outp.data,
@@ -168,6 +171,70 @@ begin
     assert outp.valid = '0' report "spurious data!" severity failure;
 
     done <= true;
+    wait;
+  end process;
+
+  co_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable co_v : compressed_stream_single;
+  begin
+    file_open(fil, "cs.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, co_v, false);
+      dbg_co_exp <= co_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_co.valid = '1';
+      end loop;
+
+      for i in 0 to 7 loop
+        assert std_match(co_v.data(i), dbg_co.data(i)) severity failure;
+      end loop;
+      assert std_match(co_v.last, dbg_co.last) severity failure;
+      assert std_match(co_v.endi, dbg_co.endi) severity failure;
+
+    end loop;
+    file_close(fil);
+    wait;
+  end process;
+
+  de_check_proc: process is
+    file     fil  : text;
+    variable lin  : line;
+    variable de_v : decompressed_stream;
+  begin
+    file_open(fil, "de.tv", read_mode);
+
+    wait until reset = '0';
+    wait until rising_edge(clk);
+
+    while not endfile(fil) loop
+
+      readline(fil, lin);
+      stream_des(lin, de_v, false);
+      dbg_de_exp <= de_v;
+
+      loop
+        wait until rising_edge(clk);
+        exit when dbg_de.valid = '1';
+      end loop;
+
+      for i in 0 to 7 loop
+        assert std_match(de_v.data(i), dbg_de.data(i)) severity failure;
+      end loop;
+      assert std_match(de_v.last, dbg_de.last) severity failure;
+      assert std_match(de_v.cnt, dbg_de.cnt) severity failure;
+
+    end loop;
+    file_close(fil);
     wait;
   end process;
 
