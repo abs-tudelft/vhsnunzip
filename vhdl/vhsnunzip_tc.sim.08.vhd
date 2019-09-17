@@ -85,6 +85,7 @@ begin
     variable lin  : line;
     variable s1   : positive := 1;
     variable s2   : positive := 1;
+    variable t    : real := 0.0;
     variable rnd  : real;
     variable inp_v : wide_io_stream;
   begin
@@ -98,7 +99,8 @@ begin
 
       loop
         uniform(s1, s2, rnd);
-        exit when rnd < 0.5;
+        exit when rnd < sin(t) * 0.7 + 0.5;
+        t := t + 0.0001;
         wait until rising_edge(clk);
       end loop;
 
@@ -107,6 +109,7 @@ begin
 
       inp <= inp_v;
       loop
+        t := t + 0.0001;
         wait until rising_edge(clk);
         exit when inp_ready = '1';
       end loop;
@@ -122,6 +125,7 @@ begin
     variable lin  : line;
     variable s1   : positive := 2;
     variable s2   : positive := 2;
+    variable t    : real := 0.0;
     variable rnd  : real;
     variable outp_v : wide_io_stream;
   begin
@@ -137,7 +141,8 @@ begin
 
       loop
         uniform(s1, s2, rnd);
-        exit when rnd < 0.3;
+        exit when rnd < cos(t) * 0.7 + 0.5;
+        t := t + 0.00012;
         wait until rising_edge(clk);
       end loop;
 
@@ -147,6 +152,7 @@ begin
 
       outp_ready <= '1';
       loop
+        t := t + 0.00012;
         wait until rising_edge(clk);
         exit when outp.valid = '1';
       end loop;
