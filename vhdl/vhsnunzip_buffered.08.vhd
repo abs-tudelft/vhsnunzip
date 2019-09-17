@@ -670,8 +670,8 @@ begin
   -- we don't do this right now.
   arbiter_a_inst: vhsnunzip_port_arbiter
     generic map (
-      IF_LO_PRIO    => (0 => 3, 1 => 3, 2 => 1, 3 => 4),
-      IF_HI_PRIO    => (0 => 3, 1 => 3, 2 => 1),
+      IF_LO_PRIO    => (0 => 3, 1 => 1, 2 => 1, 3 => 4),
+      IF_HI_PRIO    => (0 => 3, 1 => 1, 2 => 1),
       LATENCY       => 3
     )
     port map (
@@ -697,8 +697,8 @@ begin
 
   arbiter_b_inst: vhsnunzip_port_arbiter
     generic map (
-      IF_LO_PRIO    => (0 => 3, 1 => 3, 2 => 2, 3 => 0),
-      IF_HI_PRIO    => (0 => 3, 1 => 3, 2 => 2),
+      IF_LO_PRIO    => (0 => 3, 1 => 1, 2 => 2, 3 => 0),
+      IF_HI_PRIO    => (0 => 3, 1 => 1, 2 => 2),
       LATENCY       => 3
     )
     port map (
