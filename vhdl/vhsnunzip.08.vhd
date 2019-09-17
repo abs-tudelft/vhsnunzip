@@ -16,7 +16,7 @@ entity vhsnunzip is
   generic (
 
     -- Number of decompression cores to instantiate.
-    COUNT       : positive := 5;
+    COUNT       : positive := 8;
 
     -- (Desired) ratio of block RAM to UltraRAM usage, expressed as a fraction.
     -- The defaults below represent the ratio available in most Virtex
@@ -57,9 +57,13 @@ entity vhsnunzip is
     in_cnt      : in  std_logic_vector(4 downto 0);
     in_last     : in  std_logic;
 
-    -- Decompressed output stream. This stream is normalized.
+    -- Decompressed output stream. This stream is normalized. The dvalid signal
+    -- is used for the special case of a zero-length packet; a single transfer
+    -- with last high, dvalid low, cnt zero, and unspecified data is produced
+    -- in this case. Otherwise, dvalid is always high.
     out_valid   : out std_logic;
     out_ready   : in  std_logic;
+    out_dvalid  : out std_logic;
     out_data    : out std_logic_vector(255 downto 0);
     out_cnt     : out std_logic_vector(4 downto 0);
     out_last    : out std_logic
@@ -117,18 +121,10 @@ architecture behavior of vhsnunzip is
 
   constant COUNT_BITS : natural := imax(1, log2ceil(COUNT));
 
-  type snappy_stream is record
-    valid     : std_logic;
-    data      : std_logic_vector(255 downto 0);
-    cnt       : std_logic_vector(4 downto 0);
-    last      : std_logic;
-  end record;
-  type snappy_stream_array is array (natural range <>) of snappy_stream;
-
   -- Streams for the individual units.
-  signal u_in         : snappy_stream_array(0 to COUNT-1);
+  signal u_in         : wide_io_stream_array(0 to COUNT-1);
   signal u_in_ready   : std_logic_array(0 to COUNT-1);
-  signal u_out        : snappy_stream_array(0 to COUNT-1);
+  signal u_out        : wide_io_stream_array(0 to COUNT-1);
   signal u_out_ready  : std_logic_array(0 to COUNT-1);
 
   -- Internal copies of the handshake outputs.
@@ -159,6 +155,7 @@ begin
         in_last     => u_in(idx).last,
         out_valid   => u_out(idx).valid,
         out_ready   => u_out_ready(idx),
+        out_dvalid  => u_out(idx).dvalid,
         out_data    => u_out(idx).data,
         out_cnt     => u_out(idx).cnt,
         out_last    => u_out(idx).last
@@ -212,6 +209,7 @@ begin
       end if;
     end loop;
     out_valid_i <= u_out(to_integer(out_sel)).valid;
+    out_dvalid  <= u_out(to_integer(out_sel)).dvalid;
     out_data    <= u_out(to_integer(out_sel)).data;
     out_cnt     <= u_out(to_integer(out_sel)).cnt;
     out_last_i  <= u_out(to_integer(out_sel)).last;

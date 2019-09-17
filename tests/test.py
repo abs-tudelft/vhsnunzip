@@ -65,6 +65,7 @@ if vhdeps_target is not None:
         'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_tc',
         'vhsnunzip_cmd_gen_1_tc', 'vhsnunzip_cmd_gen_2_tc',
         'vhsnunzip_pipeline_tc', 'vhsnunzip_unbuffered_tc',
+        'vhsnunzip_tc',
         '-i', '..'] + vhdeps_args)
     if code != 0:
         sys.exit(code)

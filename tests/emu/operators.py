@@ -21,12 +21,15 @@ def wide_data_source(chunks):
     `WideIOStream` stream."""
 
     for chunk in chunks:
-        for offs in range(0, len(chunk), WI*4):
-            data = tuple(chunk[offs:offs+WI*4])
-            cnt = len(data)
-            data += (0,) * (WI*4 - len(data))
-            last = offs + WI*4 >= len(chunk)
-            yield WideIOStream(data, last, cnt)
+        if chunk:
+            for offs in range(0, len(chunk), WI*4):
+                data = tuple(chunk[offs:offs+WI*4])
+                cnt = len(data)
+                data += (0,) * (WI*4 - len(data))
+                last = offs + WI*4 >= len(chunk)
+                yield WideIOStream(True, data, last, cnt)
+        else:
+            yield WideIOStream(False, (0,) * (WI*4), True, 0)
 
 
 def pre_decoder(cs_stream):

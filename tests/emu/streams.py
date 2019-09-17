@@ -309,6 +309,7 @@ class DecompressedStream(_DecompressedStream):
             '>' if self.last else '|')
 
 _WideIOStream = namedtuple('_WideIOStream', [
+    'dvalid',   # data valid, selects between normal and null packet transfer
     'data',     # decompressed data (WI*4 bytes)
     'last',     # indicator for last line in chunk
     'cnt',      # number of valid data bytes if last is set
@@ -316,15 +317,17 @@ _WideIOStream = namedtuple('_WideIOStream', [
 
 class WideIOStream(_WideIOStream):
     def __new__(cls, *args, **kwargs):
-        de = super(WideIOStream, cls).__new__(cls, *args, **kwargs)
-        assert is_byte_array(de.data, WI*4)
-        assert is_std_logic(de.last)
-        assert de.cnt == WI*4 or de.last
-        assert de.cnt >= 1
-        return de
+        io = super(WideIOStream, cls).__new__(cls, *args, **kwargs)
+        assert is_byte_array(io.data, WI*4)
+        assert is_std_logic(io.last)
+        assert is_std_logic(io.dvalid)
+        assert io.cnt == WI*4 or io.last
+        assert (io.cnt >= 1) == bool(io.dvalid)
+        return io
 
     def serialize(self):
         s = []
+        s.append(binary(self.dvalid, 1))
         for idx, value in reversed(list(enumerate(self.data))):
             s.append(binary(value, 8, idx < self.cnt))
         s.append(binary(self.last, 1))

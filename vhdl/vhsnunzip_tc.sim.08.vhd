@@ -52,6 +52,7 @@ begin
       in_cnt        => inp.cnt,
       in_last       => inp.last,
       out_valid     => outp.valid,
+      out_dvalid    => outp.dvalid,
       out_ready     => outp_ready,
       out_data      => outp.data,
       out_cnt       => outp.cnt,
@@ -151,6 +152,7 @@ begin
       end loop;
       outp_ready <= '0';
 
+      assert std_match(outp_v.dvalid, outp.dvalid) severity failure;
       assert std_match(outp_v.data, outp.data) severity failure;
       assert std_match(outp_v.last, outp.last) severity failure;
       assert std_match(outp_v.cnt, outp.cnt) severity failure;

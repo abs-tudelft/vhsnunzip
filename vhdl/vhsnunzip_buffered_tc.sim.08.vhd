@@ -56,6 +56,7 @@ begin
       dbg_de        => dbg_de,
       out_valid     => outp.valid,
       out_ready     => outp_ready,
+      out_dvalid    => outp.dvalid,
       out_data      => outp.data,
       out_cnt       => outp.cnt,
       out_last      => outp.last
@@ -154,6 +155,7 @@ begin
       end loop;
       outp_ready <= '0';
 
+      assert std_match(outp_v.dvalid, outp.dvalid) severity failure;
       assert std_match(outp_v.data, outp.data) severity failure;
       assert std_match(outp_v.last, outp.last) severity failure;
       assert std_match(outp_v.cnt, outp.cnt) severity failure;

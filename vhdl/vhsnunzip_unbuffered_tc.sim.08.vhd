@@ -53,9 +53,9 @@ begin
       co_last       => co_last,
       de_valid      => de_valid,
       de_ready      => de_ready,
+      de_dvalid     => de_dvalid,
       de_data       => de_data,
       de_cnt        => de_cnt,
-      de_dvalid     => de_dvalid,
       de_last       => de_last
     );
 

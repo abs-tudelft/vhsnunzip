@@ -21,9 +21,9 @@ package vhsnunzip_pkg is
       co_last     : in  std_logic;
       de_valid    : out std_logic;
       de_ready    : in  std_logic;
+      de_dvalid   : out std_logic;
       de_data     : out std_logic_vector(63 downto 0);
       de_cnt      : out std_logic_vector(3 downto 0);
-      de_dvalid   : out std_logic;
       de_last     : out std_logic
     );
   end component;
@@ -46,6 +46,7 @@ package vhsnunzip_pkg is
       in_last     : in  std_logic;
       out_valid   : out std_logic;
       out_ready   : in  std_logic;
+      out_dvalid  : out std_logic;
       out_data    : out std_logic_vector(255 downto 0);
       out_cnt     : out std_logic_vector(4 downto 0);
       out_last    : out std_logic

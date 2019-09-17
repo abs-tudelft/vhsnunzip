@@ -590,13 +590,17 @@ package vhsnunzip_int_pkg is
   -- I/O stream for the buffered units, only used for simulation.
   type wide_io_stream is record
     valid     : std_logic;
+    dvalid    : std_logic;
     data      : std_logic_vector(255 downto 0);
     cnt       : std_logic_vector(4 downto 0);
     last      : std_logic;
   end record;
 
+  type wide_io_stream_array is array (natural range <>) of wide_io_stream;
+
   constant WIDE_IO_STREAM_INIT : wide_io_stream := (
     valid     => '0',
+    dvalid    => UNDEF,
     data      => (others => UNDEF),
     cnt       => (others => UNDEF),
     last      => UNDEF
@@ -627,6 +631,7 @@ package vhsnunzip_int_pkg is
       -- pragma translate_on
       out_valid   : out std_logic;
       out_ready   : in  std_logic;
+      out_dvalid  : out std_logic;
       out_data    : out std_logic_vector(255 downto 0);
       out_cnt     : out std_logic_vector(4 downto 0);
       out_last    : out std_logic
@@ -771,10 +776,12 @@ package body vhsnunzip_int_pkg is
 
   procedure stream_des(l: inout line; value: out wide_io_stream; to_x: boolean) is
   begin
+    read(l, value.dvalid);
     read(l, value.data);
     read(l, value.last);
     read(l, value.cnt);
     if to_x then
+      value.dvalid := to_x01(value.dvalid);
       value.data := to_x01(value.data);
       value.last := to_x01(value.last);
       value.cnt := to_x01(value.cnt);

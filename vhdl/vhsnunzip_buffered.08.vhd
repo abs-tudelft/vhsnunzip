@@ -58,9 +58,13 @@ entity vhsnunzip_buffered is
     dbg_de      : out decompressed_stream;
     -- pragma translate_on
 
-    -- Decompressed output stream. This stream is normalized.
+    -- Decompressed output stream. This stream is normalized. The dvalid signal
+    -- is used for the special case of a zero-length packet; a single transfer
+    -- with last high, dvalid low, cnt zero, and unspecified data is produced
+    -- in this case. Otherwise, dvalid is always high.
     out_valid   : out std_logic;
     out_ready   : in  std_logic;
+    out_dvalid  : out std_logic;
     out_data    : out std_logic_vector(255 downto 0);
     out_cnt     : out std_logic_vector(4 downto 0);
     out_last    : out std_logic
@@ -91,6 +95,7 @@ architecture behavior of vhsnunzip_buffered is
   signal of_data_val    : std_logic_vector(1 downto 0);
   signal of_data        : std_logic_vector(255 downto 0);
   signal of_ctrl_val    : std_logic;
+  signal of_dvalid      : std_logic;
   signal of_cnt         : std_logic_vector(4 downto 0);
   signal of_last        : std_logic;
   signal of_level       : unsigned(5 downto 0);
@@ -148,6 +153,7 @@ architecture behavior of vhsnunzip_buffered is
   signal of_ptr_r       : unsigned(10 downto 0) := (others => '0');
   signal of_rem_r       : unsigned(11 downto 0) := (others => '1');
   signal of_last_cnt_r  : unsigned(4 downto 0) := (others => '0');
+  signal of_last_sent_r : std_logic;
   signal level_r        : unsigned(11 downto 0) := (others => '0');
   signal busy_r         : std_logic;
 
@@ -230,16 +236,18 @@ begin
 
   out_ctrl_fifo_inst: vhsnunzip_fifo
     generic map (
-      CTRL_WIDTH    => 6
+      CTRL_WIDTH    => 7
     )
     port map (
       clk           => clk,
       reset         => reset,
       wr_valid      => of_ctrl_val,
+      wr_ctrl(6)    => of_dvalid,
       wr_ctrl(5)    => of_last,
       wr_ctrl(4 downto 0) => of_cnt,
       rd_valid      => outf_valid_vec(2),
       rd_ready      => outf_ready,
+      rd_ctrl(6)    => out_dvalid,
       rd_ctrl(5)    => out_last,
       rd_ctrl(4 downto 0) => out_cnt,
       level         => of_level
@@ -357,6 +365,7 @@ begin
     variable of_ptr       : unsigned(10 downto 0) := (others => '0');
     variable of_rem       : unsigned(11 downto 0) := (0 => '0', others => '1');
     variable of_last_cnt  : unsigned(4 downto 0) := (others => '0');
+    variable of_last_sent : std_logic;
     variable level        : unsigned(11 downto 0) := (others => '0');
     variable busy         : std_logic;
 
@@ -387,6 +396,7 @@ begin
       of_ptr        := of_ptr_r;
       of_rem        := of_rem_r;
       of_last_cnt   := of_last_cnt_r;
+      of_last_sent  := of_last_sent_r;
       level         := level_r;
       busy          := busy_r;
 
@@ -552,7 +562,7 @@ begin
       -- Reset ourselves (with the exception of the output FIFOs and memory
       -- logic) when we're done with a chunk.
       int_reset <= reset;
-      if of_rem_r(11) = '1' and of_rem_r(0) = '0' and de_last_seen_r = '1' then
+      if of_last_sent = '1' then
         if of_mreqh(0).valid = '0' and of_mreqh(1).valid = '0' then
           int_reset <= not int_reset;
         end if;
@@ -560,6 +570,7 @@ begin
 
       -- Handle the output stream.
       of_ctrl_val <= '0';
+      of_dvalid <= '1';
       of_cnt <= "00000";
       of_last <= '0';
       for idx in 0 to 1 loop
@@ -571,8 +582,8 @@ begin
         of_mreqh(idx).ev_wctrl := (others => '0');
         of_mreqh(idx).od_wctrl := (others => '0');
       end loop;
-      if (of_rem_r(11) = '0' or (of_rem_r(0) = '1' and de_last_seen_r = '1')) and of_block = '0' then
-        if of_mreqh(0).valid = '0' and of_mreqh(1).valid = '0' then
+      if of_rem_r(11) = '0' or ((of_rem_r(0) = '1' or of_last_sent = '0') and de_last_seen_r = '1') then
+        if of_mreqh(0).valid = '0' and of_mreqh(1).valid = '0' and of_block = '0' then
           of_mreqh(0).valid := '1';
           of_mreqh(1).valid := '1';
           of_mreqh(0).ev_addr := of_ptr & "0";
@@ -583,7 +594,12 @@ begin
           of_ctrl_val <= '1';
           if of_rem(11) = '1' then
             of_last <= '1';
-            of_cnt <= std_logic_vector(of_last_cnt);
+            if of_rem_r(0) = '1' then
+              of_cnt <= std_logic_vector(of_last_cnt);
+            else
+              of_dvalid <= '0';
+            end if;
+            of_last_sent := '1';
           end if;
 
           of_rem := of_rem - 1;
@@ -603,6 +619,7 @@ begin
         of_ptr        := (others => '0');
         of_rem        := (0 => '0', others => '1');
         of_last_cnt   := (others => '0');
+        of_last_sent  := '0';
         de_last_seen  := '0';
         level         := (others => '0');
         busy          := '0';
@@ -639,6 +656,7 @@ begin
       of_ptr_r        <= of_ptr;
       of_rem_r        <= of_rem;
       of_last_cnt_r   <= of_last_cnt;
+      of_last_sent_r  <= of_last_sent;
       level_r         <= level;
       busy_r          <= busy;
 

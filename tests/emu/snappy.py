@@ -30,14 +30,17 @@ def compress(data, bindir=None, snzip_args=None, verify=False,
     offset = 0
     uncompressed_chunks = []
     compressed_chunks = []
-    while offset < len(data):
-        if random.random() < max_prob:
-            size = max_chunk_size
-        else:
-            size = random.randint(min_chunk_size, max_chunk_size)
-        chunk = data[offset:offset + size]
-        uncompressed_chunks.append(chunk)
-        offset += len(chunk)
+    if data:
+        while offset < len(data):
+            if random.random() < max_prob:
+                size = max_chunk_size
+            else:
+                size = random.randint(min_chunk_size, max_chunk_size)
+            chunk = data[offset:offset + size]
+            uncompressed_chunks.append(chunk)
+            offset += len(chunk)
+    else:
+        uncompressed_chunks.append(b'')
 
     # Compress the chunks.
     with tempfile.TemporaryDirectory() as tempdir:

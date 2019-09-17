@@ -58,9 +58,9 @@ entity vhsnunzip_unbuffered is
     -- StreamReshaper with element size 1 on both the input and the output.
     de_valid    : out std_logic;
     de_ready    : in  std_logic;
+    de_dvalid   : out std_logic;
     de_data     : out std_logic_vector(63 downto 0);
     de_cnt      : out std_logic_vector(3 downto 0);
-    de_dvalid   : out std_logic;
     de_last     : out std_logic
 
   );
