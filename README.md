@@ -26,18 +26,20 @@ cores for a Virtex UltraScale+ with speed grade -2:
 | Registers              | ~900  (0.1%‡) | ~2300 (0.3%‡)        | ~12000 (1.5%‡) | ~19200 (2.4%‡) |
 | BRAMs*                 | 0             | 0                    | 16 (2.2%‡)     | 32 (4.4%‡)     |
 | URAMs*                 | 2 (0.6%‡)     | 2 (0.6%‡)            | 8 (2.5%‡)      | 12 (3.8%‡)     |
-| Throughput per cycle†  | ~5.5 B/cycle  | TODO                 | TODO           | TODO           |
-| Throughput per second† | ~1.5 GB/s     | TODO                 | TODO           | TODO           |
+| Throughput per cycle†  | ~5.5 B/cycle  | ~4.0 B/cycle         | ~20 B/cycle    | ~32 B/cycle    |
+| Throughput per second† | ~1.5 GB/s     | ~1.1 GB/s            | ~5.0 GB/s      | ~8.0 GB/s      |
 
 *Each core can be configured to use 2 URAMs or 16 BRAMs, depending on what's
 available. The multi-core design will by default try to match the BRAM/URAM
 ratio to the relative availability on a Virtex UltraScale+ FPGA (=21/10).
 
 †As can be expected with a decompression engine, the throughput varies with
-the compressibility of the data. Theoretical minimum per core (for a sane
-compressor) is ~2.5 bytes per cycle; theoretical maximum per core is 8 bytes
-per cycle; theoretical maximum per multicore design is 32 bytes per cycle.
-The throughput numbers are output/decompressed-referenced.
+the compressibility of the data; the numbers above were obtained using English
+text. Theoretical minimum per core (for a sane compressor) is ~2.5 bytes per
+cycle; theoretical maximum per core is 8 bytes per cycle; theoretical maximum
+per multicore design is 32 bytes per cycle. The listed throughput for the
+buffered core is slower because buffering time is accounted for. The throughput
+numbers are output/decompressed-referenced.
 
 ‡Relative to the size of a VU3P (the smallest Virtex UltraScale+ device).
 
