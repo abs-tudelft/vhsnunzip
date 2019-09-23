@@ -1,5 +1,5 @@
 
-TOPLEVELS = vhsnunzip_unbuffered vhsnunzip_buffered vhsnunzip_5 vhsnunzip_8
+TOPLEVELS = vhsnunzip_unbuffered_small vhsnunzip_unbuffered vhsnunzip_buffered vhsnunzip_5 vhsnunzip_8
 
 .PHONY: all
 all: synth

@@ -9,6 +9,7 @@ package vhsnunzip_pkg is
   -- are limited to the speed of the decompression engine.
   component vhsnunzip_unbuffered is
     generic (
+      LONG_CHUNKS : boolean := true;
       RAM_STYLE   : string := "URAM"
     );
     port (

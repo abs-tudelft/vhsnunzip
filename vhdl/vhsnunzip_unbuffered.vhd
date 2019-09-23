@@ -14,6 +14,10 @@ use work.vhsnunzip_int_pkg.all;
 entity vhsnunzip_unbuffered is
   generic (
 
+    -- Whether long chunks (>64kiB) should be supported. If this is disabled,
+    -- the core will be a couple hundred LUTs smaller.
+    LONG_CHUNKS : boolean := true;
+
     -- This block can use either 2 UltraRAMs or 16 Xilinx 36k block RAMs.
     -- Select "URAM" for UltraRAMs or "BRAM" for block RAMs.
     RAM_STYLE   : string := "URAM"
@@ -89,7 +93,7 @@ begin
   -- Datapath.
   datapath_inst: vhsnunzip_pipeline
     generic map (
-      LONG_CHUNKS => true
+      LONG_CHUNKS => LONG_CHUNKS
     )
     port map (
       clk         => clk,
