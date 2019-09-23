@@ -411,6 +411,9 @@ begin
       end loop;
       if co_mreq_ready = '1' then
         co_busy := co_mreqh.valid;
+        if co_mreqh.valid = '1' and co_mreqh.ev_addr(0) = '1' then
+          level := level - 1;
+        end if;
         co_mreqh.valid := '0';
       else
         co_busy := '0';
@@ -510,9 +513,6 @@ begin
           co_mreqh.valid := '1';
           co_mreqh.ev_addr := co_ptr;
           co_mreqh.od_addr := co_ptr;
-          if co_ptr(0) = '1' then
-            level := level - 1;
-          end if;
           co_ptr := co_ptr + 1;
           co_rem := co_rem - 1;
         end if;
