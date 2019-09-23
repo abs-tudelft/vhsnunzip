@@ -31,10 +31,10 @@ def report_info(toplevel):
     # Print summary/
     print('Key specs for %s:' % toplevel)
     print(' - Max. freq: %.2f MHz' % max_f_mhz)
-    print(' - LUTs:      %d' % luts)
-    print(' - Registers: %d' % regs)
-    print(' - BRAMs:     %d' % bram)
-    print(' - URAMs:     %d' % uram)
+    print(' - LUTs:      %6d %.1f%%' % (luts, luts / 6005.77))
+    print(' - Registers: %6d %.1f%%' % (regs, regs / 12011.54))
+    print(' - BRAMs:     %6d %.1f%%' % (bram, bram / 10.24))
+    print(' - URAMs:     %6d %.1f%%' % (uram, uram / 4.70))
     print()
 
     return True
