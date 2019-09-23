@@ -139,7 +139,7 @@ begin
         -- carry-free...
         cp_lt := lt_ptr + unsigned(cp_rel(15 downto 3));
         cmh.lt_swap := cp_lt(0);
-        cmh.lt_adev := cp_lt(12 downto 1) + cp_lt(0);
+        cmh.lt_adev := cp_lt(12 downto 1) + cp_lt(0 downto 0);
         cmh.lt_adod := cp_lt(12 downto 1);
 
         -- If we need to read too far back for the short term memory to reach

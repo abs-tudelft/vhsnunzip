@@ -91,7 +91,7 @@ package vhsnunzip_int_pkg is
     endi      => (others => UNDEF)
   );
 
-  procedure stream_des(l: inout line; value: out compressed_stream_single; to_x: boolean);
+  procedure stream_des(l: inout line; value: inout compressed_stream_single; to_x: boolean);
 
   -- Preprocessed compressed data stream, including information to skip over
   -- the uncompressed length field, and including a second "lookahead" line to
@@ -130,7 +130,7 @@ package vhsnunzip_int_pkg is
     endi      => (others => UNDEF)
   );
 
-  procedure stream_des(l: inout line; value: out compressed_stream_double; to_x: boolean);
+  procedure stream_des(l: inout line; value: inout compressed_stream_double; to_x: boolean);
 
   -- Compressed data stream preprocessor.
   component vhsnunzip_pre_decoder is
@@ -184,7 +184,7 @@ package vhsnunzip_int_pkg is
 
   end record;
 
-  procedure stream_des(l: inout line; value: out element_stream; to_x: boolean);
+  procedure stream_des(l: inout line; value: inout element_stream; to_x: boolean);
 
   constant ELEMENT_STREAM_INIT : element_stream := (
     valid     => '0',
@@ -261,7 +261,7 @@ package vhsnunzip_int_pkg is
 
   end record;
 
-  procedure stream_des(l: inout line; value: out partial_command_stream; to_x: boolean);
+  procedure stream_des(l: inout line; value: inout partial_command_stream; to_x: boolean);
 
   constant PARTIAL_COMMAND_STREAM_INIT : partial_command_stream := (
     valid     => '0',
@@ -378,7 +378,7 @@ package vhsnunzip_int_pkg is
 
   end record;
 
-  procedure stream_des(l: inout line; value: out command_stream; to_x: boolean);
+  procedure stream_des(l: inout line; value: inout command_stream; to_x: boolean);
 
   constant COMMAND_STREAM_INIT : command_stream := (
     valid     => '0',
@@ -438,7 +438,7 @@ package vhsnunzip_int_pkg is
     cnt       => (others => UNDEF)
   );
 
-  procedure stream_des(l: inout line; value: out decompressed_stream; to_x: boolean);
+  procedure stream_des(l: inout line; value: inout decompressed_stream; to_x: boolean);
 
   -- Snappy decompression pipeline.
   component vhsnunzip_pipeline is
@@ -626,7 +626,7 @@ package vhsnunzip_int_pkg is
     last      => UNDEF
   );
 
-  procedure stream_des(l: inout line; value: out wide_io_stream; to_x: boolean);
+  procedure stream_des(l: inout line; value: inout wide_io_stream; to_x: boolean);
 
   -- Buffered toplevel for a single vhsnunzip core. This version of the
   -- decompressor uses the RAMs needed for long-term decompression history
@@ -662,149 +662,199 @@ end package vhsnunzip_int_pkg;
 
 package body vhsnunzip_int_pkg is
 
-  procedure stream_des(l: inout line; value: out compressed_stream_single; to_x: boolean) is
+  function vhsn_to_x01(x: std_logic) return std_logic is
+  begin
+    return to_x01(x);
+  end function;
+
+  function vhsn_to_x01(x: std_logic_vector) return std_logic_vector is
+  begin
+    return to_x01(x);
+  end function;
+
+  function vhsn_to_x01(x: unsigned) return unsigned is
+    variable y  : std_logic_vector(x'range);
+  begin
+    y := std_logic_vector(x);
+    y := to_x01(y);
+    return unsigned(y);
+  end function;
+
+  function vhsn_to_x01(x: signed) return signed is
+    variable y  : std_logic_vector(x'range);
+  begin
+    y := std_logic_vector(x);
+    y := to_x01(y);
+    return signed(y);
+  end function;
+
+  procedure vhsn_read(l: inout line; value: out std_logic) is
+  begin
+    read(l, value);
+  end procedure;
+
+  procedure vhsn_read(l: inout line; value: out std_logic_vector) is
+  begin
+    read(l, value);
+  end procedure;
+
+  procedure vhsn_read(l: inout line; value: out unsigned) is
+    variable v  : std_logic_vector(value'range);
+  begin
+    read(l, v);
+    value := unsigned(v);
+  end procedure;
+
+  procedure vhsn_read(l: inout line; value: out signed) is
+    variable v  : std_logic_vector(value'range);
+  begin
+    read(l, v);
+    value := signed(v);
+  end procedure;
+
+  procedure stream_des(l: inout line; value: inout compressed_stream_single; to_x: boolean) is
   begin
     for i in value.data'range loop
-      read(l, value.data(i));
+      vhsn_read(l, value.data(i));
       if to_x then
-        value.data(i) := to_x01(value.data(i));
+        value.data(i) := vhsn_to_x01(value.data(i));
       end if;
     end loop;
-    read(l, value.last);
-    read(l, value.endi);
+    vhsn_read(l, value.last);
+    vhsn_read(l, value.endi);
     if to_x then
-      value.last := to_x01(value.last);
-      value.endi := to_x01(value.endi);
+      value.last := vhsn_to_x01(value.last);
+      value.endi := vhsn_to_x01(value.endi);
     end if;
     value.valid := '1';
   end procedure;
 
-  procedure stream_des(l: inout line; value: out compressed_stream_double; to_x: boolean) is
+  procedure stream_des(l: inout line; value: inout compressed_stream_double; to_x: boolean) is
   begin
     for i in value.data'range loop
-      read(l, value.data(i));
+      vhsn_read(l, value.data(i));
       if to_x then
-        value.data(i) := to_x01(value.data(i));
+        value.data(i) := vhsn_to_x01(value.data(i));
       end if;
     end loop;
-    read(l, value.first);
-    read(l, value.start);
-    read(l, value.last);
-    read(l, value.endi);
+    vhsn_read(l, value.first);
+    vhsn_read(l, value.start);
+    vhsn_read(l, value.last);
+    vhsn_read(l, value.endi);
     if to_x then
-      value.first := to_x01(value.first);
-      value.start := to_x01(value.start);
-      value.last := to_x01(value.last);
-      value.endi := to_x01(value.endi);
+      value.first := vhsn_to_x01(value.first);
+      value.start := vhsn_to_x01(value.start);
+      value.last := vhsn_to_x01(value.last);
+      value.endi := vhsn_to_x01(value.endi);
     end if;
     value.valid := '1';
   end procedure;
 
-  procedure stream_des(l: inout line; value: out element_stream; to_x: boolean) is
+  procedure stream_des(l: inout line; value: inout element_stream; to_x: boolean) is
   begin
-    read(l, value.cp_val);
-    read(l, value.cp_off);
-    read(l, value.cp_len);
-    read(l, value.li_val);
-    read(l, value.li_off);
-    read(l, value.li_len);
-    read(l, value.ld_pop);
-    read(l, value.last);
+    vhsn_read(l, value.cp_val);
+    vhsn_read(l, value.cp_off);
+    vhsn_read(l, value.cp_len);
+    vhsn_read(l, value.li_val);
+    vhsn_read(l, value.li_off);
+    vhsn_read(l, value.li_len);
+    vhsn_read(l, value.ld_pop);
+    vhsn_read(l, value.last);
     if to_x then
-      value.cp_val := to_x01(value.cp_val);
-      value.cp_off := to_x01(value.cp_off);
-      value.cp_len := to_x01(value.cp_len);
-      value.li_val := to_x01(value.li_val);
-      value.li_off := to_x01(value.li_off);
-      value.li_len := to_x01(value.li_len);
-      value.ld_pop := to_x01(value.ld_pop);
-      value.last := to_x01(value.last);
+      value.cp_val := vhsn_to_x01(value.cp_val);
+      value.cp_off := vhsn_to_x01(value.cp_off);
+      value.cp_len := vhsn_to_x01(value.cp_len);
+      value.li_val := vhsn_to_x01(value.li_val);
+      value.li_off := vhsn_to_x01(value.li_off);
+      value.li_len := vhsn_to_x01(value.li_len);
+      value.ld_pop := vhsn_to_x01(value.ld_pop);
+      value.last := vhsn_to_x01(value.last);
     end if;
     value.valid := '1';
   end procedure;
 
-  procedure stream_des(l: inout line; value: out partial_command_stream; to_x: boolean) is
+  procedure stream_des(l: inout line; value: inout partial_command_stream; to_x: boolean) is
   begin
-    read(l, value.cp_off);
-    read(l, value.cp_len);
-    read(l, value.cp_rle);
-    read(l, value.li_val);
-    read(l, value.li_off);
-    read(l, value.li_len);
-    read(l, value.ld_pop);
-    read(l, value.last);
+    vhsn_read(l, value.cp_off);
+    vhsn_read(l, value.cp_len);
+    vhsn_read(l, value.cp_rle);
+    vhsn_read(l, value.li_val);
+    vhsn_read(l, value.li_off);
+    vhsn_read(l, value.li_len);
+    vhsn_read(l, value.ld_pop);
+    vhsn_read(l, value.last);
     if to_x then
-      value.cp_off := to_x01(value.cp_off);
-      value.cp_len := to_x01(value.cp_len);
-      value.cp_rle := to_x01(value.cp_rle);
-      value.li_val := to_x01(value.li_val);
-      value.li_off := to_x01(value.li_off);
-      value.li_len := to_x01(value.li_len);
-      value.ld_pop := to_x01(value.ld_pop);
-      value.last := to_x01(value.last);
+      value.cp_off := vhsn_to_x01(value.cp_off);
+      value.cp_len := vhsn_to_x01(value.cp_len);
+      value.cp_rle := vhsn_to_x01(value.cp_rle);
+      value.li_val := vhsn_to_x01(value.li_val);
+      value.li_off := vhsn_to_x01(value.li_off);
+      value.li_len := vhsn_to_x01(value.li_len);
+      value.ld_pop := vhsn_to_x01(value.ld_pop);
+      value.last := vhsn_to_x01(value.last);
     end if;
     value.valid := '1';
   end procedure;
 
-  procedure stream_des(l: inout line; value: out command_stream; to_x: boolean) is
+  procedure stream_des(l: inout line; value: inout command_stream; to_x: boolean) is
   begin
-    read(l, value.lt_val);
-    read(l, value.lt_adev);
-    read(l, value.lt_adod);
-    read(l, value.lt_swap);
-    read(l, value.st_addr);
-    read(l, value.cp_rol);
-    read(l, value.cp_rle);
-    read(l, value.cp_end);
-    read(l, value.li_rol);
-    read(l, value.li_end);
-    read(l, value.ld_pop);
-    read(l, value.last);
+    vhsn_read(l, value.lt_val);
+    vhsn_read(l, value.lt_adev);
+    vhsn_read(l, value.lt_adod);
+    vhsn_read(l, value.lt_swap);
+    vhsn_read(l, value.st_addr);
+    vhsn_read(l, value.cp_rol);
+    vhsn_read(l, value.cp_rle);
+    vhsn_read(l, value.cp_end);
+    vhsn_read(l, value.li_rol);
+    vhsn_read(l, value.li_end);
+    vhsn_read(l, value.ld_pop);
+    vhsn_read(l, value.last);
     if to_x then
-      value.lt_val := to_x01(value.lt_val);
-      value.lt_adev := to_x01(value.lt_adev);
-      value.lt_adod := to_x01(value.lt_adod);
-      value.lt_swap := to_x01(value.lt_swap);
-      value.st_addr := to_x01(value.st_addr);
-      value.cp_rol := to_x01(value.cp_rol);
-      value.cp_rle := to_x01(value.cp_rle);
-      value.cp_end := to_x01(value.cp_end);
-      value.li_rol := to_x01(value.li_rol);
-      value.li_end := to_x01(value.li_end);
-      value.ld_pop := to_x01(value.ld_pop);
-      value.last := to_x01(value.last);
+      value.lt_val := vhsn_to_x01(value.lt_val);
+      value.lt_adev := vhsn_to_x01(value.lt_adev);
+      value.lt_adod := vhsn_to_x01(value.lt_adod);
+      value.lt_swap := vhsn_to_x01(value.lt_swap);
+      value.st_addr := vhsn_to_x01(value.st_addr);
+      value.cp_rol := vhsn_to_x01(value.cp_rol);
+      value.cp_rle := vhsn_to_x01(value.cp_rle);
+      value.cp_end := vhsn_to_x01(value.cp_end);
+      value.li_rol := vhsn_to_x01(value.li_rol);
+      value.li_end := vhsn_to_x01(value.li_end);
+      value.ld_pop := vhsn_to_x01(value.ld_pop);
+      value.last := vhsn_to_x01(value.last);
     end if;
     value.valid := '1';
   end procedure;
 
-  procedure stream_des(l: inout line; value: out decompressed_stream; to_x: boolean) is
+  procedure stream_des(l: inout line; value: inout decompressed_stream; to_x: boolean) is
   begin
     for i in value.data'range loop
-      read(l, value.data(i));
+      vhsn_read(l, value.data(i));
       if to_x then
-        value.data(i) := to_x01(value.data(i));
+        value.data(i) := vhsn_to_x01(value.data(i));
       end if;
     end loop;
-    read(l, value.last);
-    read(l, value.cnt);
+    vhsn_read(l, value.last);
+    vhsn_read(l, value.cnt);
     if to_x then
-      value.last := to_x01(value.last);
-      value.cnt := to_x01(value.cnt);
+      value.last := vhsn_to_x01(value.last);
+      value.cnt := vhsn_to_x01(value.cnt);
     end if;
     value.valid := '1';
   end procedure;
 
-  procedure stream_des(l: inout line; value: out wide_io_stream; to_x: boolean) is
+  procedure stream_des(l: inout line; value: inout wide_io_stream; to_x: boolean) is
   begin
-    read(l, value.dvalid);
-    read(l, value.data);
-    read(l, value.last);
-    read(l, value.cnt);
+    vhsn_read(l, value.dvalid);
+    vhsn_read(l, value.data);
+    vhsn_read(l, value.last);
+    vhsn_read(l, value.cnt);
     if to_x then
-      value.dvalid := to_x01(value.dvalid);
-      value.data := to_x01(value.data);
-      value.last := to_x01(value.last);
-      value.cnt := to_x01(value.cnt);
+      value.dvalid := vhsn_to_x01(value.dvalid);
+      value.data := vhsn_to_x01(value.data);
+      value.last := vhsn_to_x01(value.last);
+      value.cnt := vhsn_to_x01(value.cnt);
     end if;
     value.valid := '1';
   end procedure;
