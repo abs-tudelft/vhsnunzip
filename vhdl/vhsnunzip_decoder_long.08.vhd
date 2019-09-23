@@ -5,8 +5,8 @@ use ieee.numeric_std.all;
 library work;
 use work.vhsnunzip_int_pkg.all;
 
--- Snappy element decoder supporting only chunks up to and including 64kiB.
-entity vhsnunzip_decoder is
+-- Snappy element decoder with support for chunks > 64kiB.
+entity vhsnunzip_decoder_long is
   port (
     clk         : in  std_logic;
     reset       : in  std_logic;
@@ -20,22 +20,26 @@ entity vhsnunzip_decoder is
     el_ready    : in  std_logic
 
   );
-end vhsnunzip_decoder;
+end vhsnunzip_decoder_long;
 
-architecture behavior of vhsnunzip_decoder is
+architecture behavior of vhsnunzip_decoder_long is
 begin
   proc: process (clk) is
 
     -- Input holding register.
     variable cdh    : compressed_stream_double := COMPRESSED_STREAM_DOUBLE_INIT;
 
-    -- Offset of the next element with respect to cdh.data.
-    variable off    : unsigned(16 downto 0) := (others => '0');
+    -- Offset of the next element with respect to cdh.data. The complete offset
+    -- is encoded as off + (offh << 8); the counter carry is pipelined to meet
+    -- timing.
+    variable off    : unsigned(8 downto 0) := (others => '0');
+    variable offh   : unsigned(23 downto 0) := (others => '0');
 
     -- Next offset, in case the data we're decoding actually consists of
-    -- element headers and not literal data/
+    -- element headers and not literal data.
     variable offns  : unsigned(3 downto 0) := (others => '0');
-    variable offn   : unsigned(16 downto 0) := (others => '0');
+    variable offn   : unsigned(8 downto 0) := (others => '0');
+    variable offnh  : unsigned(23 downto 0) := (others => '0');
 
     -- Same as `off`, but modulo the line width and converted to integer.
     variable ofi    : natural range 0 to 7 := 0;
@@ -55,13 +59,18 @@ begin
       if cdh.valid = '0' then
         cdh := cd;
         if cdh.valid = '1' and cdh.first = '1' then
-          off := resize(cdh.start, 17);
+          off := resize(cdh.start, 9);
         end if;
       end if;
 
       -- Decode when we have valid data and have room for the result.
       if cdh.valid = '1' and elh.valid = '0' then
         elh.valid := '1';
+
+        if off(8 downto 7) = "11" then
+          off(8) := '0';
+          offh := offh - 1;
+        end if;
 
         ---------------------------------------------------------------------
         -- Handle copy elements
@@ -84,7 +93,7 @@ begin
           when "11" =>
             -- 5-byte copy element. Note that we ignore byte 4 and 5; they
             -- should be zero! Otherwise they'd encode an offset beyond
-            -- 64kiB, and we can't decompress chunks larger than that.
+            -- 64kiB, which our memory is not long enough for.
             elh.cp_val := '1';
             offns := offns + 5;
 
@@ -121,8 +130,7 @@ begin
           elh.li_val := '0';
 
         elsif cdh.data(ofi)(7 downto 4) = "1111" then
-          -- Literal with 2- to 5-byte header. Note that we ignore bytes 4 and 5,
-          -- which would only be nonzero for literal lengths over 64kiB.
+          -- Literal with 2- to 5-byte header.
           elh.li_val := '1';
           offns := offns + 2 + unsigned(cdh.data(ofi)(3 downto 2));
 
@@ -137,22 +145,42 @@ begin
 
         if std_match(cdh.data(ofi), "111100--") then
           -- Literal with 2-byte header, or not a literal.
-          elh.li_len := X"000000" & unsigned(cdh.data(ofi + 1));
+          elh.li_len := X"000000"
+                      & unsigned(cdh.data(ofi + 1));
 
-        elsif std_match(cdh.data(ofi), "1111----") then
-          -- Literal with 3- to 5-byte header, or not a literal.
-          elh.li_len := X"0000" & unsigned(cdh.data(ofi + 2)) & unsigned(cdh.data(ofi + 1));
+        elsif std_match(cdh.data(ofi), "111101--") then
+          -- Literal with 3-byte header, or not a literal.
+          elh.li_len := X"0000"
+                      & unsigned(cdh.data(ofi + 2))
+                      & unsigned(cdh.data(ofi + 1));
+
+        elsif std_match(cdh.data(ofi), "111110--") then
+          -- Literal with 4-byte header, or not a literal.
+          elh.li_len := X"00"
+                      & unsigned(cdh.data(ofi + 3))
+                      & unsigned(cdh.data(ofi + 2))
+                      & unsigned(cdh.data(ofi + 1));
+
+        elsif std_match(cdh.data(ofi), "111111--") then
+          -- Literal with 5-byte header, or not a literal.
+          elh.li_len := unsigned(cdh.data(ofi + 4))
+                      & unsigned(cdh.data(ofi + 3))
+                      & unsigned(cdh.data(ofi + 2))
+                      & unsigned(cdh.data(ofi + 1));
 
         else
           -- Literal with 1-byte header, or not a literal.
-          elh.li_len := X"000000" & "00" & unsigned(cdh.data(ofi)(7 downto 2));
+          elh.li_len := X"000000"
+                      & "00" & unsigned(cdh.data(ofi)(7 downto 2));
 
         end if;
 
         -- Seek past literal data.
-        offn := resize(offns, 17);
+        offn := resize(offns, 9);
+        offnh := (others => '0');
         if elh.li_val = '1' then
-          offn := offn + resize(elh.li_len, 17) + 1;
+          offn := offn + elh.li_len(7 downto 0) + 1;
+          offnh := elh.li_len(31 downto 8);
         end if;
 
         ---------------------------------------------------------------------
@@ -163,18 +191,19 @@ begin
         -- go inside this if statement, but by doing it this way, the decoded
         -- header information is independent of the result of the condition
         -- (only the valid bits are).
-        if off > cdh.endi then
+        if off > cdh.endi or offh /= 0 then
           elh.cp_val := '0';
           elh.li_val := '0';
         else
           off := offn;
+          offh := offnh;
         end if;
 
         -- If our new offset is beyond the current line, invalidate the line
         -- and decrease by 8 accordingly to prepare for the next line. Also
         -- indicate to the datapath that it should pop from the literal line
         -- stream after executing this command to stay in sync.
-        if off > cdh.endi then
+        if off > cdh.endi or offh /= 0 then
           off := off - 8;
           cdh.valid := '0';
           elh.ld_pop := '1';

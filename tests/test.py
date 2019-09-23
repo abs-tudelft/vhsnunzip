@@ -36,10 +36,12 @@ with open(fname, 'rb') as fin:
 # Chunk it up randomly.
 print('Compressing input...')
 chunk_size = int(keys.pop('chunk', '65536'), 0)
+min_chunk_size=int(keys.pop('min_chunk', str(chunk_size)), 0)
+max_chunk_size=int(keys.pop('max_chunk', str(chunk_size)), 0)
 compressed, uncompressed = compress(
     data, 'tools/bin',
-    min_chunk_size=int(keys.pop('min_chunk', str(chunk_size)), 0),
-    max_chunk_size=int(keys.pop('max_chunk', str(chunk_size)), 0),
+    min_chunk_size=min_chunk_size,
+    max_chunk_size=max_chunk_size,
     max_prob=float(keys.pop('max_prob', '0')),
     verify=keys.pop('verify', None) != None)
 
@@ -59,14 +61,19 @@ drain(verifier(de, uncompressed))
 # Run vhdeps if requested.
 if vhdeps_target is not None:
     print('Checking that VHDL and Python streams match...')
-    import vhdeps
-    code = vhdeps.run_cli([
-        vhdeps_target,
-        'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_tc',
+    test_cases = [
+        'vhsnunzip_pre_decoder_tc', 'vhsnunzip_decoder_long_tc',
         'vhsnunzip_cmd_gen_1_tc', 'vhsnunzip_cmd_gen_2_tc',
         'vhsnunzip_pipeline_tc', 'vhsnunzip_unbuffered_tc',
-        'vhsnunzip_tc',
-        '-i', '..'] + vhdeps_args)
+    ]
+    if max_chunk_size <= 65536:
+        test_cases.append('vhsnunzip_tc')
+        test_cases.append('vhsnunzip_decoder_tc')
+    else:
+        print('NOTE: not simulating buffered core; chunk size > 64kiB')
+    import vhdeps
+    code = vhdeps.run_cli(
+        [vhdeps_target] + test_cases + ['-i', '..'] + vhdeps_args)
     if code != 0:
         sys.exit(code)
 

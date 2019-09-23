@@ -29,14 +29,10 @@ entity vhsnunzip_unbuffered is
     --   https://github.com/google/snappy/blob/
     --     b61134bc0a6a904b41522b4e5c9e80874c730cef/format_description.txt
     --
-    -- This unit is designed for chunks of up to and including 64kiB
-    -- uncompressed size, but as long as the maximum literal length is 64kiB
-    -- (i.e. 4- and 5-byte literal headers are not used), the compression
-    -- window size is limited to 64kiB (i.e. all copy offsets are 64kiB-1 or
-    -- lower), this block should work for sizes up to 2MiB-1 (after this, the
-    -- decompressed size header grows beyond 3 bytes). Violating these rules
-    -- results in garbage at the output, but should not cause lasting problems,
-    -- so the next chunk should be decompressed correctly again.
+    -- This unit should be able to handle any Snappy chunk compressed with a
+    -- history buffer of 64kiB or less (the default for Snappy is 32kiB).
+    -- Copies from further back in history will result in garbage for that
+    -- copy.
     --
     -- The input stream must be normalized; that is, all 8 bytes must be valid
     -- for all but the last transfer, and the last transfer must contain at
@@ -92,6 +88,9 @@ begin
 
   -- Datapath.
   datapath_inst: vhsnunzip_pipeline
+    generic map (
+      LONG_CHUNKS => true
+    )
     port map (
       clk         => clk,
       reset       => reset,

@@ -7,6 +7,13 @@ use work.vhsnunzip_int_pkg.all;
 
 -- Decompression datapath command generator stage 2.
 entity vhsnunzip_cmd_gen_2 is
+  generic (
+
+    -- Whether long chunks (>64kiB) should be supported. If this is disabled,
+    -- the core will be a couple hundred LUTs smaller.
+    LONG_CHUNKS : boolean := true
+
+  );
   port (
     clk         : in  std_logic;
     reset       : in  std_logic;
@@ -55,7 +62,15 @@ begin
 
     -- Remaining literal length, diminished-one. The sign bit is an inverted
     -- validity bit.
-    variable li_len : signed(16 downto 0) := (others => '1');
+    function li_high_fn return natural is
+    begin
+      if LONG_CHUNKS then
+        return 32;
+      else
+        return 16;
+      end if;
+    end function;
+    variable li_len : signed(li_high_fn downto 0) := (others => '1');
 
     -- Remaining literal length, diminished-one.
     variable li_off : unsigned(3 downto 0);
@@ -103,10 +118,10 @@ begin
         cmh.valid := '1';
 
         -- If we're out of stuff to do, load the next commands.
-        if li_len(16) = '1' and c1_pend = '1' then
+        if li_len(li_len'high) = '1' and c1_pend = '1' then
           cp_len := c1h.cp_len;
           if c1h.li_val = '1' then
-            li_len := signed(resize(c1h.li_len, 17));
+            li_len := signed(resize(c1h.li_len, li_len'length));
           end if;
           li_off := c1h.li_off;
           c1_pend := '0';
@@ -163,7 +178,7 @@ begin
         cmh.cp_end := off;
 
         -- Determine how many literal bytes we can write.
-        if li_len < signed(resize(budget, 17)) then
+        if li_len < signed(resize(budget, li_len'length)) then
           len := unsigned(li_len(3 downto 0)) + 1;
         else
           len := budget;
@@ -188,7 +203,7 @@ begin
         -- Update state for literal.
         off := off + len;
         li_off := li_off + len;
-        li_len := li_len - signed(resize(len, 17));
+        li_len := li_len - signed(resize(len, li_len'length));
 
         -- Save the offset after the literal so the datapath can derive which
         -- bytes should come from the literal path, and how many bytes are
@@ -219,13 +234,13 @@ begin
         -- Don't advance when we still need more literal data from this
         -- element. This is possible if we ran out of write budget for this
         -- cycle.
-        if li_len(16) = '0' and li_off < 8 then
+        if li_len(li_len'high) = '0' and li_off < 8 then
           advance := false;
         end if;
 
         -- If this is the last element input stream entry, don't advance until
         -- we're completely done with it (not just done with decoding it).
-        if c1h.last = '1' and li_len(16) = '0' then
+        if c1h.last = '1' and li_len(li_len'high) = '0' then
           advance := false;
         end if;
 

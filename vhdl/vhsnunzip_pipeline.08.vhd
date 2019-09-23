@@ -7,6 +7,13 @@ use work.vhsnunzip_int_pkg.all;
 
 -- Snappy decompression pipeline.
 entity vhsnunzip_pipeline is
+  generic (
+
+    -- Whether long chunks (>64kiB) should be supported. If this is disabled,
+    -- the core will be a couple hundred LUTs smaller.
+    LONG_CHUNKS : boolean := true
+
+  );
   port (
     clk         : in  std_logic;
     reset       : in  std_logic;
@@ -238,6 +245,9 @@ begin
   -- headers that cross a line boundary; we can just look into the next line
   -- when an element wraps.
   pre_dec_inst: vhsnunzip_pre_decoder
+    generic map (
+      LONG_CHUNKS => LONG_CHUNKS
+    )
     port map (
       clk         => clk,
       reset       => reset,
@@ -257,15 +267,31 @@ begin
 
   -- Main decoder. This decodes the element headers and seeks past the literal
   -- data.
-  main_dec_inst: vhsnunzip_decoder
-    port map (
-      clk         => clk,
-      reset       => reset,
-      cd          => cd,
-      cd_ready    => cd_ready,
-      el          => el,
-      el_ready    => el_ready
-    );
+  simple_decoder_gen: if not LONG_CHUNKS generate
+  begin
+    main_dec_inst: vhsnunzip_decoder
+      port map (
+        clk         => clk,
+        reset       => reset,
+        cd          => cd,
+        cd_ready    => cd_ready,
+        el          => el,
+        el_ready    => el_ready
+      );
+  end generate;
+
+  long_decoder_gen: if LONG_CHUNKS generate
+  begin
+    main_dec_inst: vhsnunzip_decoder_long
+      port map (
+        clk         => clk,
+        reset       => reset,
+        cd          => cd,
+        cd_ready    => cd_ready,
+        el          => el,
+        el_ready    => el_ready
+      );
+  end generate;
 
   -- pragma translate_off
   dbg_el_proc: process (el, el_ready) is
@@ -299,6 +325,9 @@ begin
   -- chunks, limited by the amount of slots already taken by the copy chunk
   -- that may come before it. It also handles all address generation.
   cmd_gen_2_inst: vhsnunzip_cmd_gen_2
+    generic map (
+      LONG_CHUNKS => LONG_CHUNKS
+    )
     port map (
       clk         => clk,
       reset       => reset,

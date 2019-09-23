@@ -31,10 +31,6 @@ architecture testcase of vhsnunzip_tc is
   signal outp_ready   : std_logic := '0';
   signal outp_exp     : wide_io_stream := WIDE_IO_STREAM_INIT;
 
-  signal out_data_exp : std_logic_vector(255 downto 0) := (others => '0');
-  signal out_cnt_exp  : std_logic_vector(4 downto 0) := (others => '0');
-  signal out_last_exp : std_logic := '0';
-
 begin
 
   uut: vhsnunzip

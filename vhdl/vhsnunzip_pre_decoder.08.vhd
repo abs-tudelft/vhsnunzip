@@ -7,6 +7,13 @@ use work.vhsnunzip_int_pkg.all;
 
 -- Compressed data stream preprocessor.
 entity vhsnunzip_pre_decoder is
+  generic (
+
+    -- Whether long chunks (>64kiB) should be supported. If this is disabled,
+    -- the core will be a couple hundred LUTs smaller.
+    LONG_CHUNKS : boolean := true
+
+  );
   port (
     clk         : in  std_logic;
     reset       : in  std_logic;
@@ -65,13 +72,30 @@ begin
         cdh.data(0 to 7) := cur.data;
         cdh.data(8 to 15) := nxt.data;
         cdh.first := first;
-        if cur.data(0)(7) = '0' then
-          cdh.start := "01";
-        elsif cur.data(1)(7) = '0' then
-          cdh.start := "10";
+
+        -- Seek past the uncompressed size varint.
+        if LONG_CHUNKS then
+          if cur.data(0)(7) = '0' then
+            cdh.start := "001";
+          elsif cur.data(1)(7) = '0' then
+            cdh.start := "010";
+          elsif cur.data(2)(7) = '0' then
+            cdh.start := "011";
+          elsif cur.data(3)(7) = '0' then
+            cdh.start := "100";
+          else
+            cdh.start := "101";
+          end if;
         else
-          cdh.start := "11";
+          if cur.data(0)(7) = '0' then
+            cdh.start := "001";
+          elsif cur.data(1)(7) = '0' then
+            cdh.start := "010";
+          else
+            cdh.start := "011";
+          end if;
         end if;
+
         cdh.last := cur.last;
         cdh.endi := cur.endi;
         cur.valid := '0';

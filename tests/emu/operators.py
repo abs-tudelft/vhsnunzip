@@ -117,10 +117,12 @@ def decoder(cd):
         elif li_len == 61:
             li_len = (data[ofi+2] << 8) | data[ofi+1]
             li_hdlen = 3
-        elif li_len > 61:
-            li_hdlen = 1
-            if li_val:
-                raise ValueError('oh_snap')
+        elif li_len == 62:
+            li_len = (data[ofi+3] << 16) | (data[ofi+2] << 8) | data[ofi+1]
+            li_hdlen = 4
+        elif li_len == 63:
+            li_len = (data[ofi+4] << 24) | (data[ofi+3] << 16) | (data[ofi+2] << 8) | data[ofi+1]
+            li_hdlen = 5
         else:
             li_hdlen = 1
         if li_val:
@@ -499,8 +501,8 @@ def datapath(commands):
         # Load the data sources available to the datapath.
         li_data = tuple((cm.py_data[byte + WI*li_la[byte]] for byte in range(WI)))
         st_data = tuple((st[byte][cm.st_addr - st_la[byte] + oh_valid[byte]] for byte in range(WI)))
-        le_data = lt[cm.lt_adev * 2]
-        lo_data = lt[cm.lt_adod * 2 + 1]
+        le_data = lt[(cm.lt_adev * 2) & (2**(16-WB)-1)]
+        lo_data = lt[(cm.lt_adod * 2 + 1) & (2**(16-WB)-1)]
 
         # Generate the copy source multiplexer.
         for byte in range(WI):
@@ -557,6 +559,7 @@ def datapath(commands):
             if cm.li_end:
                 lt[wr_ptr] = data
                 wr_ptr += 1
+                wr_ptr &= 2**(16-WB)-1
 
             # Write to output stream.
             if cm.last:

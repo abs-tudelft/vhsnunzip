@@ -177,6 +177,9 @@ begin
 
   -- Datapath.
   pipeline_inst: vhsnunzip_pipeline
+    generic map (
+      LONG_CHUNKS   => false
+    )
     port map (
       clk           => clk,
       reset         => int_reset,

@@ -112,7 +112,7 @@ package vhsnunzip_int_pkg is
     -- indicates the byte index of the first element; start should be ignored
     -- otherwise.
     first     : std_logic;
-    start     : unsigned(1 downto 0);
+    start     : unsigned(2 downto 0);
 
     -- Asserted to mark the last line of a chunk. When asserted, endi indicates
     -- the index of the last valid byte. endi must be 7 otherwise.
@@ -134,6 +134,9 @@ package vhsnunzip_int_pkg is
 
   -- Compressed data stream preprocessor.
   component vhsnunzip_pre_decoder is
+    generic (
+      LONG_CHUNKS : boolean := true
+    );
     port (
       clk         : in  std_logic;
       reset       : in  std_logic;
@@ -170,7 +173,7 @@ package vhsnunzip_int_pkg is
     -- saves a bit).
     li_val    : std_logic;
     li_off    : unsigned(3 downto 0);
-    li_len    : unsigned(15 downto 0);
+    li_len    : unsigned(31 downto 0);
 
     -- Indicates that the literal data FIFO should be popped after this stream
     -- transfer has been handled.
@@ -195,8 +198,19 @@ package vhsnunzip_int_pkg is
     last      => UNDEF
   );
 
-  -- Snappy element decoder.
+  -- Snappy element decoders.
   component vhsnunzip_decoder is
+    port (
+      clk         : in  std_logic;
+      reset       : in  std_logic;
+      cd          : in  compressed_stream_double;
+      cd_ready    : out std_logic;
+      el          : out element_stream;
+      el_ready    : in  std_logic
+    );
+  end component;
+
+  component vhsnunzip_decoder_long is
     port (
       clk         : in  std_logic;
       reset       : in  std_logic;
@@ -236,7 +250,7 @@ package vhsnunzip_int_pkg is
     -- saves a bit).
     li_val    : std_logic;
     li_off    : unsigned(3 downto 0);
-    li_len    : unsigned(15 downto 0);
+    li_len    : unsigned(31 downto 0);
 
     -- Indicates that the literal data FIFO should be popped after this stream
     -- transfer has been handled.
@@ -384,6 +398,9 @@ package vhsnunzip_int_pkg is
 
   -- Decompression datapath command generator stage 2.
   component vhsnunzip_cmd_gen_2 is
+    generic (
+      LONG_CHUNKS : boolean := true
+    );
     port (
       clk         : in  std_logic;
       reset       : in  std_logic;
@@ -425,6 +442,9 @@ package vhsnunzip_int_pkg is
 
   -- Snappy decompression pipeline.
   component vhsnunzip_pipeline is
+    generic (
+      LONG_CHUNKS : boolean := true
+    );
     port (
       clk         : in  std_logic;
       reset       : in  std_logic;

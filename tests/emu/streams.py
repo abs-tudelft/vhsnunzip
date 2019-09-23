@@ -57,7 +57,7 @@ class CompressedStreamDouble(_CompressedStreamDouble):
         cd = super(CompressedStreamDouble, cls).__new__(cls, *args, **kwargs)
         assert is_byte_array(cd.data, WI*2)
         assert is_std_logic(cd.first)
-        assert is_unsigned(cd.start, 2)
+        assert is_unsigned(cd.start, 3)
         assert is_std_logic(cd.last)
         assert is_unsigned(cd.endi, WB)
         assert cd.endi == WI-1 or cd.last
@@ -68,7 +68,7 @@ class CompressedStreamDouble(_CompressedStreamDouble):
         for idx, value in enumerate(self.data):
             s.append(binary(value, 8, idx <= self.py_endi and (not self.first or idx >= self.start)))
         s.append(binary(self.first, 1))
-        s.append(binary(self.start, 2, self.first))
+        s.append(binary(self.start, 3, self.first))
         s.append(binary(self.last, 1))
         s.append(binary(self.endi, WB))
         return ''.join(s)
@@ -102,7 +102,7 @@ class ElementStream(_ElementStream):
         assert is_unsigned(el.cp_len, 6)
         assert is_std_logic(el.li_val)
         assert is_unsigned(el.li_off, WB+1)
-        assert is_unsigned(el.li_len, 16)
+        assert is_unsigned(el.li_len, 32)
         assert is_std_logic(el.ld_pop)
         assert is_std_logic(el.last)
         assert el.ld_pop or not el.last
@@ -115,7 +115,7 @@ class ElementStream(_ElementStream):
         s.append(binary(self.cp_len, 6, self.cp_val))
         s.append(binary(self.li_val, 1))
         s.append(binary(self.li_off, WB+1, self.li_val))
-        s.append(binary(self.li_len, 16, self.li_val))
+        s.append(binary(self.li_len, 32, self.li_val))
         s.append(binary(self.ld_pop, 1))
         s.append(binary(self.last, 1))
         return ''.join(s)
@@ -152,7 +152,7 @@ class PartialCommandStream(_PartialCommandStream):
             assert c1.cp_off > c1.cp_len or c1.cp_len < 0
         assert is_std_logic(c1.li_val)
         assert is_unsigned(c1.li_off, WB+1)
-        assert is_unsigned(c1.li_len, 16)
+        assert is_unsigned(c1.li_len, 32)
         assert is_std_logic(c1.ld_pop)
         assert is_std_logic(c1.last)
         assert c1.ld_pop or not c1.last
@@ -165,7 +165,7 @@ class PartialCommandStream(_PartialCommandStream):
         s.append(binary(self.cp_rle, 1, self.cp_len >= 0))
         s.append(binary(self.li_val, 1))
         s.append(binary(self.li_off, WB+1, self.li_val))
-        s.append(binary(self.li_len, 16, self.li_val))
+        s.append(binary(self.li_len, 32, self.li_val))
         s.append(binary(self.ld_pop, 1))
         s.append(binary(self.last, 1))
         return ''.join(s)
