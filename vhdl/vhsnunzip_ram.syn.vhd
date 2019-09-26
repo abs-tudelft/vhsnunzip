@@ -5,9 +5,11 @@ use ieee.numeric_std.all;
 library work;
 use work.vhsnunzip_int_pkg.all;
 
+-- pragma vhdeps ignore package vcomponents
 library unisim;
 use unisim.vcomponents.all;
 
+-- pragma vhdeps ignore package vcomponents
 library unimacro;
 use unimacro.vcomponents.all;
 
@@ -75,6 +77,7 @@ begin
       b_wdat(71 downto 64) <= b_cmd.wctrl;
     end process;
 
+    -- pragma vhdeps ignore component uram288_base
     uram_inst : uram288_base
       generic map (
         IREG_PRE_A  => "TRUE",
@@ -210,6 +213,7 @@ begin
 
     byte_gen: for byte in 0 to 7 generate
     begin
+      -- pragma vhdeps ignore component bram_tdp_macro
       bram: bram_tdp_macro
         generic map (
           BRAM_SIZE     => "36Kb",
