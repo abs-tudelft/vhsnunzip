@@ -81,7 +81,10 @@ def decoder(cd):
         # pull in a new half-line from the compressed stream when we need it
         first = False
         if not cdh_valid:
-            cdh = next(cd)
+            try:
+                cdh = next(cd)
+            except StopIteration:
+                return
             cdh_valid = True
             data = cdh.data
             if cdh.first:
@@ -166,7 +169,10 @@ def cmd_gen_1(elements):
 
         # Load next element pair if we need more data.
         if not elh_valid:
-            elh = next(elements)
+            try:
+                elh = next(elements)
+            except StopIteration:
+                return
             elh_valid = True
             if elh.cp_val:
                 cp_rem = elh.cp_len
@@ -246,7 +252,10 @@ def cmd_gen_2(partial_commands):
 
         # Load next element pair if we need more data.
         if not c1h_valid:
-            c1h = next(partial_commands)
+            try:
+                c1h = next(partial_commands)
+            except StopIteration:
+                return
             c1h_valid = True
             c1_pend = c1h.cp_len >= 0 or c1h.li_val
 
@@ -609,7 +618,10 @@ def verifier(data_stream, expected):
         if idx > len(chunk):
             raise ValueError('spurious data in chunk')
         yield transfer
-    next(data_stream)
+    try:
+        next(data_stream)
+    except StopIteration:
+        return
     raise ValueError('spurious chunk')
 
 
