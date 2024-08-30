@@ -16,7 +16,8 @@ snzip-install/bin/snzip snzip-install/bin/snunzip: snzip snappy-install/lib/libs
 	cd snzip && ../snzip/configure \
 		--prefix=$(HERE)/snzip-install \
 		--with-snappy=$(HERE)/snappy-install \
-		--with-static-snappy
+		--with-static-snappy \
+		CXXFLAGS="-fno-rtti"
 	$(MAKE) -C snzip
 	$(MAKE) -C snzip install
 
@@ -29,7 +30,7 @@ snappy-install/lib/libsnappy.a: snappy
 	-mv snappy-install/lib64 snappy-install/lib
 
 snappy snzip:
-	git submodule update --init snappy snzip
+	git submodule update --init --recursive snappy snzip
 
 .PHONY: clean
 clean:
