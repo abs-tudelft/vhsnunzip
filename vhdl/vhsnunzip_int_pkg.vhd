@@ -550,13 +550,13 @@ package vhsnunzip_int_pkg is
     ev_wren       : std_logic;
     od_wren       : std_logic;
 
-    -- Data to write.
-    ev_wdat       : byte_array(0 to 7);
-    od_wdat       : byte_array(0 to 7);
-
     -- Control info to write (saved in parity bit storage).
     ev_wctrl      : std_logic_vector(7 downto 0);
     od_wctrl      : std_logic_vector(7 downto 0);
+
+    -- Data to write.
+    ev_wdat       : byte_array(0 to 7);
+    od_wdat       : byte_array(0 to 7);
 
   end record;
 
